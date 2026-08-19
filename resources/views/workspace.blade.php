@@ -32,7 +32,7 @@
             <nav class="hidden xl:flex items-center gap-1 whitespace-nowrap">
                 @foreach(['dashboard'=>'Dashboard', 'people'=>'People', 'inbox'=>'Inbox', 'pipeline'=>'Pipeline', 'marketing'=>'Marketing', 'automations'=>'Automations', 'sites'=>'Sites'] as $key => $label)
                     @php $icons=['dashboard'=>'fa-border-all','people'=>'fa-users','inbox'=>'fa-comment-dots','pipeline'=>'fa-bullseye','marketing'=>'fa-bullhorn','automations'=>'fa-bolt','sites'=>'fa-globe']; $active=$key===$page; @endphp
-                    <a href="{{ $key === 'dashboard' ? route('dashboard') : route('workspace', $key) }}" class="px-3 py-2 rounded-xl flex items-center gap-2 text-sm font-medium transition-colors {{ $active ? 'bg-[#16233b] text-[#5b9bf6] border border-blue-500/5' : 'text-slate-400 hover:text-white hover:bg-white/[0.03]' }}"><i class="fa-solid {{ $icons[$key] }}"></i>{{ $label }}</a>
+                    <a href="{{ $key === 'dashboard' ? route('dashboard') : route($key) }}" class="px-3 py-2 rounded-xl flex items-center gap-2 text-sm font-medium transition-colors {{ $active ? 'bg-[#16233b] text-[#5b9bf6] border border-blue-500/5' : 'text-slate-400 hover:text-white hover:bg-white/[0.03]' }}"><i class="fa-solid {{ $icons[$key] }}"></i>{{ $label }}</a>
                 @endforeach
             </nav>
         </div>
@@ -105,10 +105,38 @@
                 document.getElementById('chat-avatar').src = `https://i.pravatar.cc/100?img=${item.dataset.image}`;
             }));
         </script>
-    @else
+    @elseif($page === 'pipeline')
+        @php
+            $stages = [
+                ['New Lead', 'bg-blue-500', '$12,500', [['Acme Corp', 'Website Redesign', 'Oct 12', '$4,500', '12', 'border-l-red-700 bg-[#151420]'], ['TechFlow', 'SEO Campaign', 'Oct 14', '$3,000', '33', 'border-l-yellow-400 bg-[#1d1e20]'], ['Global Inc', 'Consulting', 'Oct 15', '$5,000', '60', 'border-l-blue-500 bg-[#111b2c']]],
+                ['Contacted', 'bg-yellow-400', '$8,000', [['StartUp LLC', 'App Development', 'Oct 10', '$6,500', '44', 'border-l-red-700 bg-[#151420]'], ['Retail Co', 'Marketing Retainer', 'Oct 11', '$1,500', '68', 'border-l-blue-500 bg-[#111b2c']]],
+                ['Proposal Sent', 'bg-violet-500', '$45,000', [['Big Corp', 'Enterprise Setup', 'Oct 05', '$25,000', '47', 'border-l-red-700 bg-[#151420]'], ['Data Systems', 'Cloud Migration', 'Oct 08', '$12,000', '32', 'border-l-yellow-400 bg-[#1d1e20]'], ['FinTech Inc', 'Security Audit', 'Oct 09', '$4,000', '11', 'border-l-yellow-400 bg-[#1d1e20]'], ['Creative Agency', 'UI/UX Design', 'Oct 10', '$4,000', '68', 'border-l-blue-500 bg-[#111b2c']]],
+                ['Closed Won', 'bg-emerald-500', '$5,000', [['Loyal Client', 'Q3 Retainer', 'Oct 01', '$5,000', '25', 'border-l-emerald-400 bg-[#10202a']]],
+            ];
+        @endphp
         <main class="w-full max-w-[1785px] mx-auto px-4 sm:px-6 py-9">
-            <div class="flex items-start justify-between gap-4 mb-8"><div><h1 class="text-2xl font-bold text-white">{{ $current['label'] }}</h1><p class="text-sm text-slate-400 mt-1">{{ $current['description'] }}</p></div><button class="bg-[#5b9bf6] hover:bg-[#6ca7fa] text-[#06101f] text-sm font-medium px-4 h-10 rounded-xl transition-colors"><i class="fa-solid fa-plus mr-2"></i>{{ $current['button'] }}</button></div>
-            <section class="bg-cardBg border border-cardBorder rounded-xl min-h-[360px] p-6 flex flex-col items-center justify-center text-center"><span class="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center text-xl mb-4"><i class="fa-solid {{ $current['icon'] }}"></i></span><h2 class="text-lg font-semibold text-white">Your {{ strtolower($current['label']) }} workspace</h2><p class="text-sm text-slate-400 max-w-md mt-2">Everything you need to work with {{ strtolower($current['label']) }} will appear here.</p></section>
+            <div class="flex items-start justify-between gap-4 mb-7"><div><h1 class="text-2xl font-bold text-white">Pipeline</h1><p class="text-sm text-slate-400 mt-1">Manage your deals and opportunities.</p></div><div class="flex gap-2"><button class="h-10 px-4 border border-cardBorder hover:bg-white/[0.04] rounded-xl text-sm font-medium"><i class="fa-solid fa-filter mr-3"></i>Filter</button><button class="h-10 px-4 bg-[#5b9bf6] hover:bg-[#6ca7fa] text-[#06101f] rounded-xl text-sm font-medium"><i class="fa-solid fa-plus mr-3"></i>New Deal</button></div></div>
+            <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 items-start">
+                @foreach($stages as [$stage, $color, $total, $deals])
+                    <div class="min-h-[730px] bg-[#101624] border border-cardBorder rounded-xl overflow-hidden">
+                        <div class="h-12 px-3 border-b border-cardBorder flex items-center justify-between"><div class="flex items-center gap-2 text-sm font-semibold text-slate-200"><span class="w-2.5 h-2.5 rounded-full {{ $color }}"></span>{{ $stage }}<span class="ml-1 px-2 py-0.5 rounded-full bg-slate-700/70 text-[11px] text-slate-300">{{ count($deals) }}</span></div><span class="text-xs font-semibold text-slate-400">{{ $total }}</span></div>
+                        <div class="p-3 space-y-3">
+                            @foreach($deals as [$company, $title, $date, $amount, $avatar, $card])
+                                <article class="border border-cardBorder border-l-4 {{ $card }} rounded-xl p-3.5 shadow-sm hover:-translate-y-0.5 hover:border-blue-500/40 transition-all"><div class="flex justify-between gap-2"><span class="max-w-[130px] truncate rounded-full border border-blue-400/50 px-1.5 py-0.5 text-[9px] font-medium text-white">{{ $company }}</span><button class="text-slate-400 hover:text-white"><i class="fa-solid fa-ellipsis"></i></button></div><h2 class="mt-3 text-sm font-semibold text-white">{{ $title }}</h2><div class="mt-4 flex items-center justify-between text-xs"><span class="text-slate-400"><i class="fa-regular fa-calendar mr-2"></i>{{ $date }}</span><span class="flex items-center gap-3"><strong class="text-white">{{ $amount }}</strong><img src="https://i.pravatar.cc/100?img={{ $avatar }}" class="w-6 h-6 rounded-full" alt="Assignee"></span></div></article>
+                            @endforeach
+                        </div>
+                    </div>
+                @endforeach
+            </section>
+        </main>
+    @else
+        <main class="min-h-[calc(100vh-72px)] px-4 flex items-center justify-center">
+            <section class="-mt-24 text-center max-w-xl">
+                <div class="w-24 h-24 rounded-full bg-[#202b3d] text-[#8baad7] flex items-center justify-center mx-auto text-[36px] font-bold">404</div>
+                <h1 class="mt-7 text-[30px] leading-tight font-bold text-white">Page not found</h1>
+                <p class="mt-2 text-lg leading-7 text-[#8baad7]">The page you're looking for doesn't exist or has been moved.<br>Please check the URL or navigate back to the dashboard.</p>
+                <a href="{{ route('dashboard') }}" class="inline-flex mt-8 h-10 items-center rounded-xl bg-[#5b9bf6] hover:bg-[#6ca7fa] px-4 text-sm font-medium text-[#06101f] transition-colors">Return to Dashboard</a>
+            </section>
         </main>
     @endif
 </body>
