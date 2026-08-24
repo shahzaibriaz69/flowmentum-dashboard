@@ -145,6 +145,9 @@
                 <button class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-cardBorder hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs px-4 py-2 rounded-lg font-medium transition">
                     Download Report
                 </button>
+                <a href="{{ route('marketplace.authenticate') }}" class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-cardBorder hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs px-4 py-2 rounded-lg font-medium transition">
+                    Authenticate Location
+</a>
                 <button class="bg-[#5b9bf6] hover:bg-[#6ca7fa] text-white dark:text-[#06101f] text-xs px-4 py-2 rounded-lg font-medium transition">
                     New Campaign
                 </button>

@@ -1,21 +1,20 @@
 <?php
 
+use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
+    return view('welcome');
+});
+
+Route::get('/dashboard', function () {
     return view('dashboard');
-})->name('dashboard');
+})->middleware(['auth', 'verified'])->name('dashboard');
 
-Route::get('/people', fn () => view('workspace', ['page' => 'people']))->name('people');
-Route::get('/inbox', fn () => view('workspace', ['page' => 'inbox']))->name('inbox');
-Route::get('/pipeline', fn () => view('workspace', ['page' => 'pipeline']))->name('pipeline');
-Route::get('/marketing', fn () => view('workspace', ['page' => 'marketing']))->name('marketing');
-Route::get('/automations', fn () => view('workspace', ['page' => 'automations']))->name('automations');
-Route::get('/sites', fn () => view('workspace', ['page' => 'sites']))->name('sites');
+Route::middleware('auth')->group(function () {
+    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+});
 
-// Keeps the existing shared navigation links backward-compatible.
-Route::get('/workspace/{page}', function (string $page) {
-    abort_unless(in_array($page, ['people', 'inbox', 'pipeline', 'marketing', 'automations', 'sites'], true), 404);
-
-    return redirect()->route($page);
-})->where('page', 'people|inbox|pipeline|marketing|automations|sites')->name('workspace');
+require __DIR__.'/auth.php';
