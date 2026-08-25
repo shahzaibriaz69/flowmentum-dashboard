@@ -16,13 +16,14 @@ class GhlPipeline extends Model
         'name',
     ];
 
-    public function location() : BelongsTo
+    public function location(): BelongsTo
     {
         return $this->belongsTo(GhlLocation::class, 'ghl_location_id', 'ghl_location_id');
     }
 
-    public function stages() : HasMany
+    public function stages(): HasMany
     {
-        return $this->hasMany(GhlPipelineStage::class, 'ghl_pipeline_id', 'ghl_pipeline_id');
+        return $this->hasMany(GhlPipelineStage::class, 'ghl_pipeline_id', 'ghl_pipeline_id')
+                    ->orderBy('position', 'asc');
     }
 }

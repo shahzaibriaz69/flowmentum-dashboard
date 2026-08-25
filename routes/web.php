@@ -7,6 +7,7 @@ use App\Http\Controllers\PipelineController;
 use App\Http\Controllers\MarketingController;
 use App\Http\Controllers\AutomationsController;
 use App\Http\Controllers\SitesController;
+use App\Http\Controllers\LocationSyncController; // Added
 use Illuminate\Support\Facades\Route;
 
 // 1. Root Route (Pehle Dashboard hi render hoga)
@@ -27,6 +28,9 @@ Route::middleware(['auth', 'check.location'])->group(function () {
     Route::get('/marketing', [MarketingController::class, 'index'])->name('marketing');
     Route::get('/automations', [AutomationsController::class, 'index'])->name('automations');
     Route::get('/sites', [SitesController::class, 'index'])->name('sites');
+
+    // Sync Location POST route
+    Route::post('/location/sync', [LocationSyncController::class, 'sync'])->name('location.sync');
 });
 
 // 4. Profile Routes

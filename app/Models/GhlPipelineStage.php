@@ -18,13 +18,14 @@ class GhlPipelineStage extends Model
         'position',
     ];
 
-    public function pipeline() : BelongsTo
+    public function pipeline(): BelongsTo
     {
         return $this->belongsTo(GhlPipeline::class, 'ghl_pipeline_id', 'ghl_pipeline_id');
     }
 
-    public function opportunities() : HasMany
+    public function opportunities(): HasMany
     {
-        return $this->hasMany(GhlOpportunity::class, 'ghl_pipeline_stage_id', 'ghl_stage_id');
+      
+        return $this->hasMany(GhlOpportunity::class, 'ghl_stage_id', 'ghl_stage_id');
     }
 }
