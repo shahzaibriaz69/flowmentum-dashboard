@@ -73,7 +73,7 @@ Route::middleware('auth')->group(function () {
     })->where('page', 'people|inbox|pipeline|marketing|automations|sites')->name('workspace');
 
     Route::controller(MarketplaceController::class)
-        ->prefix('authrozation/marketplace')
+        ->prefix('authorization/marketplace')
         ->name('marketplace.')
         ->middleware('can:auth location')
         ->group(function () {
@@ -81,4 +81,7 @@ Route::middleware('auth')->group(function () {
             Route::get('/authenticate', 'authenticate')->name('authenticate');
             Route::get('/callback', 'callback')->name('callback');
         });
+
+    Route::get('/authrozation/marketplace/callback', [MarketplaceController::class, 'callback'])
+        ->middleware('can:auth location');
 });

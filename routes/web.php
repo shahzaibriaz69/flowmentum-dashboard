@@ -1,20 +1,46 @@
 <?php
 
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\PeopleController;
+use App\Http\Controllers\InboxController;
+use App\Http\Controllers\PipelineController;
+use App\Http\Controllers\MarketingController;
+use App\Http\Controllers\AutomationsController;
+use App\Http\Controllers\SitesController;
 use Illuminate\Support\Facades\Route;
 
+// 1. Root Route (Pehle Dashboard hi render hoga)
 Route::get('/', function () {
-    return view('welcome');
-});
+    return view('dashboard');
+})->middleware(['auth', 'verified', 'check.location'])->name('dashboard');
 
+// 2. Explicit Dashboard Route
 Route::get('/dashboard', function () {
     return view('dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+})->middleware(['auth', 'verified', 'check.location']);
 
+// 3. Protected CRM Routes (Dedicated Controllers per Module)
+Route::middleware(['auth', 'check.location'])->group(function () {
+    Route::get('/people', [PeopleController::class, 'index'])->name('people');
+    Route::get('/inbox', [InboxController::class, 'index'])->name('inbox');
+    Route::get('/pipeline', [PipelineController::class, 'index'])->name('pipeline');
+    Route::get('/marketing', [MarketingController::class, 'index'])->name('marketing');
+    Route::get('/automations', [AutomationsController::class, 'index'])->name('automations');
+    Route::get('/sites', [SitesController::class, 'index'])->name('sites');
+});
+
+// 4. Profile Routes
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
+// 5. Shared Navigation Legacy Route
+Route::get('/workspace/{page}', function (string $page) {
+    abort_unless(in_array($page, ['people', 'inbox', 'pipeline', 'marketing', 'automations', 'sites'], true), 404);
+    return redirect()->route($page);
+})->where('page', 'people|inbox|pipeline|marketing|automations|sites')->name('workspace');
+
+// Auth routes
 require __DIR__.'/auth.php';
