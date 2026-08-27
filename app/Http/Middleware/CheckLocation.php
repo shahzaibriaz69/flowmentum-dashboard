@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Middleware;
 
 use Closure;
@@ -9,16 +10,27 @@ class CheckLocation
 {
     public function handle(Request $request, Closure $next)
     {
-        // 1. Agar user login nahi hai to login page par bhejen
         if (!Auth::check()) {
             return redirect()->route('login');
         }
 
         $user = Auth::user();
 
-        // 2. Check karein ke user ke paas location_id majood hai ya nahi
-        if (empty($user->location_id)) {
-            // Un-authorized user ko logout karke login page par redirect kar dein
+        // Check location from all possible sources
+        $locationId = session('active_location_id') 
+            ?? $user->ghl_location_id 
+            ?? $user->location_id 
+            ?? null;
+
+        // If location is missing in user, try fetching first available location from DB fallback
+        if (!$locationId) {
+            $locationId = \App\Models\GhlLocation::first()?->ghl_location_id;
+            if ($locationId) {
+                session(['active_location_id' => $locationId]);
+            }
+        }
+
+        if (!$locationId) {
             Auth::logout();
             return redirect()->route('login')->with('error', 'Location missing or unauthorized access.');
         }

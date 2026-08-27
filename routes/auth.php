@@ -10,6 +10,7 @@ use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 use App\Http\Controllers\MarketplaceController;
+use App\Http\Controllers\PipelineController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
@@ -60,7 +61,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/people', fn() => view('workspace', ['page' => 'people']))->name('people');
     Route::get('/inbox', fn() => view('workspace', ['page' => 'inbox']))->name('inbox');
-    Route::get('/pipeline', fn() => view('workspace', ['page' => 'pipeline']))->name('pipeline');
+    Route::get('/pipeline', [PipelineController::class, 'index'])->name('pipeline');
     Route::get('/marketing', fn() => view('workspace', ['page' => 'marketing']))->name('marketing');
     Route::get('/automations', fn() => view('workspace', ['page' => 'automations']))->name('automations');
     Route::get('/sites', fn() => view('workspace', ['page' => 'sites']))->name('sites');

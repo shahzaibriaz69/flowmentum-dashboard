@@ -7,10 +7,10 @@ use App\Http\Controllers\PipelineController;
 use App\Http\Controllers\MarketingController;
 use App\Http\Controllers\AutomationsController;
 use App\Http\Controllers\SitesController;
-use App\Http\Controllers\LocationSyncController; // Added
+use App\Http\Controllers\LocationSyncController;
 use Illuminate\Support\Facades\Route;
 
-// 1. Root Route (Pehle Dashboard hi render hoga)
+// 1. Root Route
 Route::get('/', function () {
     return view('dashboard');
 })->middleware(['auth', 'verified', 'check.location'])->name('dashboard');
@@ -20,11 +20,12 @@ Route::get('/dashboard', function () {
     return view('dashboard');
 })->middleware(['auth', 'verified', 'check.location']);
 
-// 3. Protected CRM Routes (Dedicated Controllers per Module)
+// 3. Protected CRM Routes
 Route::middleware(['auth', 'check.location'])->group(function () {
     Route::get('/people', [PeopleController::class, 'index'])->name('people');
     Route::get('/inbox', [InboxController::class, 'index'])->name('inbox');
-    Route::get('/pipeline', [PipelineController::class, 'index'])->name('pipeline');
+    // Temporary test route outside middleware
+    Route::get('/test-pipeline', [App\Http\Controllers\PipelineController::class, 'index']);
     Route::get('/marketing', [MarketingController::class, 'index'])->name('marketing');
     Route::get('/automations', [AutomationsController::class, 'index'])->name('automations');
     Route::get('/sites', [SitesController::class, 'index'])->name('sites');
@@ -47,4 +48,4 @@ Route::get('/workspace/{page}', function (string $page) {
 })->where('page', 'people|inbox|pipeline|marketing|automations|sites')->name('workspace');
 
 // Auth routes
-require __DIR__.'/auth.php';
+require __DIR__ . '/auth.php';

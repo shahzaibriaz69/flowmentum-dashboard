@@ -26,25 +26,28 @@ class GhlOpportunity extends Model
 
     protected $casts = [
         'date_added' => 'datetime',
+        'monetary_value' => 'decimal:2',
     ];
 
-    public function location() : BelongsTo
+    public function location(): BelongsTo
     {
         return $this->belongsTo(GhlLocation::class, 'ghl_location_id', 'ghl_location_id');
     }
 
-    public function contact() : BelongsTo
+    public function contact(): BelongsTo
     {
         return $this->belongsTo(GhlContact::class, 'ghl_contact_id', 'ghl_contact_id');
     }
 
-    public function pipeline() : BelongsTo
+    public function pipeline(): BelongsTo
     {
         return $this->belongsTo(GhlPipeline::class, 'ghl_pipeline_id', 'ghl_pipeline_id');
     }
 
-    public function stage() : BelongsTo
+    public function stage(): BelongsTo
     {
+        // Foreign key: ghl_pipeline_stage_id (GhlOpportunity)
+        // Owner key: ghl_stage_id (GhlPipelineStage)
         return $this->belongsTo(GhlPipelineStage::class, 'ghl_pipeline_stage_id', 'ghl_stage_id');
     }
 }

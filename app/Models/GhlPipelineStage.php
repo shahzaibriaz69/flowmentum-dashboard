@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class GhlPipelineStage extends Model
 {
@@ -25,7 +25,8 @@ class GhlPipelineStage extends Model
 
     public function opportunities(): HasMany
     {
-      
-        return $this->hasMany(GhlOpportunity::class, 'ghl_stage_id', 'ghl_stage_id');
+        // Foreign key: ghl_pipeline_stage_id (GhlOpportunity)
+        // Local key: ghl_stage_id (GhlPipelineStage)
+        return $this->hasMany(GhlOpportunity::class, 'ghl_pipeline_stage_id', 'ghl_stage_id');
     }
 }
