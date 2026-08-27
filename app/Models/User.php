@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Enums\RoleEnum;
 use App\Enums\RolesEnum;
 use Database\Factories\UserFactory;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Notifications\Notifiable;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
 use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
@@ -46,50 +47,36 @@ class User extends Authenticatable
     /**
      * GHL Relationships
      */
-    public function ghlAgency() : HasOne
+    public function ghlAgency(): HasOne
     {
         return $this->hasOne(GhlAgency::class);
     }
 
-    public function ghlLocation() : HasOne
+    public function ghlLocation(): HasOne
     {
         return $this->hasOne(GhlLocation::class);
     }
 
-    public function ghlUser() : HasOne
+    public function ghlUser(): HasOne
     {
         return $this->hasOne(GhlUser::class);
     }
 
-    public function settingsOwner() : ?Model
+    public function getLocationIdAttribute()
     {
-        if ($this->hasRole(RolesEnum::AGENCY->value))
-        {
-            return $this->ghlAgency;
+        if ($this->hasRole(RoleEnum::AGENCY->value)) {
+            return $this->ghlAgency()->location_id;
         }
 
-        if ($this->hasRole(RolesEnum::LOCATION->value))
-        {
-            return $this->ghlLocation;
+        if ($this->hasRole(RoleEnum::LOCATION->value)) {
+            return $this->ghlLocation()->location_id;
+        }
+        if ($this->hasRole(RoleEnum::ADMIN->value) || $this->hasRole(RoleEnum::ADMIN->value)) {
+            return $this->ghlLocation()->location_id;
         }
 
-        // ADMIN / AGENT / USER are attached to a location, not an owner-relation
-        if ($this->ghl_location_id)
-        {
-            return GhlLocation::find($this->ghl_location_id);
-        }
+        return "";
 
-        return null;
-    }
-
-    public function canImpersonate() : bool
-    {
-        return $this->hasRole(RolesEnum::AGENCY->value);
-    }
-
-    public function canBeImpersonated() : bool
-    {
-        return ! $this->hasRole(RolesEnum::AGENCY->value);
     }
 
     /**
@@ -97,12 +84,13 @@ class User extends Authenticatable
      *
      * @return array<string, string>
      */
-    protected function casts() : array
+    protected function casts(): array
     {
         return [
-            'email_verified_at'       => 'datetime',
-            'password'                => 'hashed',
+            'email_verified_at' => 'datetime',
+            'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
         ];
     }
+
 }
