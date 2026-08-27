@@ -62,21 +62,22 @@ class User extends Authenticatable
         return $this->hasOne(GhlUser::class);
     }
 
-    public function getLocationIdAttribute()
+    public function getLocationIdAttribute(): string
     {
         if ($this->hasRole(RoleEnum::AGENCY->value)) {
-            return $this->ghlAgency()->location_id;
+            return $this->ghlAgency?->ghl_location_id ?? $this->ghlAgency?->location_id ?? '';
         }
 
         if ($this->hasRole(RoleEnum::LOCATION->value)) {
-            return $this->ghlLocation()->location_id;
-        }
-        if ($this->hasRole(RoleEnum::ADMIN->value) || $this->hasRole(RoleEnum::ADMIN->value)) {
-            return $this->ghlLocation()->location_id;
+            return $this->ghlLocation?->ghl_location_id ?? $this->ghlLocation?->location_id ?? $this->attributes['location_id'] ?? '';
         }
 
-        return "";
+        if ($this->hasRole(RoleEnum::ADMIN->value)) {
+            return $this->ghlLocation?->ghl_location_id ?? $this->ghlLocation?->location_id ?? $this->attributes['location_id'] ?? '';
+        }
 
+        // Direct users table fallbacks
+        return $this->attributes['location_id'] ?? '';
     }
 
     /**
