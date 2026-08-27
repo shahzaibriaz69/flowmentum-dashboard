@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\GhlLocation;
+use App\Models\GhlUser;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -30,10 +31,10 @@ class MarketplaceController extends Controller
     {
         return [
             'response_type' => 'code',
-            'redirect_uri'  => config('services.marketplace.callback_url'),
-            'client_id'     => config('services.marketplace.client_id'),
-            'state'         => session('marketplace_oauth_state'),
-           'scope' => 'contacts.readonly contacts.write locations.readonly locations/customValues.readonly locations/customValues.write locations/customFields.readonly locations/customFields.write locations/tasks.readonly locations/tasks.write recurring-tasks.readonly recurring-tasks.write locations/tags.readonly locations/tags.write locations/templates.readonly opportunities.readonly opportunities.write pipelines.readonly pipelines.write pipelines.create calendars.readonly calendars.write calendars/events.readonly calendars/events.write calendars/groups.readonly calendars/groups.write calendars/resources.readonly calendars/resources.write users.readonly users.write workflows.readonly',
+            'redirect_uri' => config('services.marketplace.callback_url'),
+            'client_id' => config('services.marketplace.client_id'),
+            'state' => session('marketplace_oauth_state'),
+            'scope' => 'contacts.readonly contacts.write locations.readonly locations/customValues.readonly locations/customValues.write locations/customFields.readonly locations/customFields.write locations/tasks.readonly locations/tasks.write recurring-tasks.readonly recurring-tasks.write locations/tags.readonly locations/tags.write locations/templates.readonly opportunities.readonly opportunities.write pipelines.readonly pipelines.write pipelines.create calendars.readonly calendars.write calendars/events.readonly calendars/events.write calendars/groups.readonly calendars/groups.write calendars/resources.readonly calendars/resources.write users.readonly users.write workflows.readonly',
         ];
     }
 
@@ -49,7 +50,7 @@ class MarketplaceController extends Controller
             return redirect()->route('dashboard')->with('error', $message);
         }
 
-        if (! $request->filled('code')) {
+        if (!$request->filled('code')) {
             Log::warning('GoHighLevel OAuth callback received without query parameters.', [
                 'url' => $request->fullUrlWithoutQuery(['code', 'state']),
                 'query_keys' => array_keys($request->query()),
@@ -91,7 +92,129 @@ class MarketplaceController extends Controller
 
         $request->user()->update(['location_id' => $location->ghl_location_id]);
 
-        return redirect()->route('dashboard')->with('success', 'GoHighLevel location connected successfully.');
+        // --- STEP 1: SYNC GHL USERS ---
+        if (!$this->syncUsers($location)) {
+            return redirect()->route('dashboard')->with(
+                'error',
+                'Location connected, but GHL users permission is missing. Please reconnect after enabling users.readonly in the GHL Marketplace app.'
+            );
+        }
+
+        return redirect()->route('dashboard')->with('success', 'GoHighLevel location connected and users synced successfully.');
+    }
+
+    /**
+     * Sync Location Button Action (Route: location.sync)
+     */
+   public function syncLocation(Request $request): RedirectResponse
+{
+    $user = $request->user();
+
+
+    $location = GhlLocation::where('ghl_location_id', $user->location_id)
+        ->orWhere('user_id', $user->id)
+        ->first();
+
+    if (!$location) {
+        dd('DEBUG ERROR 1: No Location record found in ghl_locations table for User ID: ' . $user->id);
+    }
+
+    $token = $this->getValidAccessToken($location);
+    if (!$token) {
+        dd('DEBUG ERROR 2: Access Token is empty or Refresh Token failed for Location ID: ' . $location->ghl_location_id);
+    }
+
+  
+    $response = Http::withHeaders([
+        'Authorization' => 'Bearer ' . $token,
+        'Version'       => '2021-07-28',
+        'Accept'        => 'application/json',
+    ])->get("https://services.leadconnectorhq.com/users/?locationId={$location->ghl_location_id}");
+
+    if (!$response->successful()) {
+        dd('DEBUG ERROR 3: GHL API Call Failed!', [
+            'status' => $response->status(),
+            'body'   => $response->json(),
+        ]);
+    }
+
+
+    $users = $response->json()['users'] ?? [];
+    dd('DEBUG SUCCESS: GHL API working!', [
+        'fetched_users_count' => count($users),
+        'users_data'          => $users,
+    ]);
+}
+
+    /**
+     * GHL Users Fetch and Database Insertion
+     */
+    private function syncUsers(GhlLocation $location): bool
+    {
+        $token = $this->getValidAccessToken($location);
+
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer ' . $token,
+            'Version' => '2021-07-28',
+            'Accept' => 'application/json',
+        ])->get("https://services.leadconnectorhq.com/users/?locationId={$location->ghl_location_id}");
+
+        if ($response->successful()) {
+            $users = $response->json()['users'] ?? [];
+
+            foreach ($users as $userData) {
+                GhlUser::updateOrCreate(
+                    ['ghl_user_id' => $userData['id']],
+                    [
+                        'user_id' => $location->user_id,
+                        'ghl_location_ids' => $userData['locationIds'] ?? [$location->ghl_location_id],
+                        'first_name' => $userData['firstName'] ?? null,
+                        'last_name' => $userData['lastName'] ?? null,
+                        'email' => $userData['email'] ?? null,
+                        'phone' => $userData['phone'] ?? null,
+                        'type' => $userData['type'] ?? null,
+                        'role' => $userData['role'] ?? null,
+                        'permissions' => $userData['permissions'] ?? null,
+                    ]
+                );
+            }
+
+            return true;
+        }
+
+        Log::error('GHL Users Sync Failed: ' . $response->body());
+        return false;
+    }
+
+    /**
+     * Token Expiration Handling & Auto Refresh
+     */
+    private function getValidAccessToken(GhlLocation $location): ?string
+    {
+        if ($location->expires_at && $location->expires_at->isPast()) {
+            $response = Http::asForm()->post(config('services.marketplace.token_url'), [
+                'grant_type' => 'refresh_token',
+                'client_id' => config('services.marketplace.client_id'),
+                'client_secret' => config('services.marketplace.client_secret'),
+                'refresh_token' => $location->refresh_token,
+            ]);
+
+            if ($response->successful()) {
+                $tokens = $response->json();
+                $location->update([
+                    'access_token' => $tokens['access_token'],
+                    'refresh_token' => $tokens['refresh_token'] ?? $location->refresh_token,
+                    'expires_at' => now()->addSeconds((int) ($tokens['expires_in'] ?? 86400)),
+                ]);
+
+                return $location->access_token;
+            }
+
+            Log::error('GHL Token Refresh Failed: ' . $response->body());
+            return null;
+        }
+
+        return $location->access_token;
     }
 
     private function validOAuthState(Request $request): bool

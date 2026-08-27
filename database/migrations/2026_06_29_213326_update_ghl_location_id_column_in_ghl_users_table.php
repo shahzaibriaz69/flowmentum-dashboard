@@ -14,6 +14,7 @@ return new class extends Migration
     public function up() : void
     {
         Schema::table('ghl_users', function(Blueprint $table) {
+            $table->dropIndex(['ghl_location_id']);
             $table->dropColumn('ghl_location_id');
             $table->json('ghl_location_ids')->nullable()->after('ghl_user_id');
         });

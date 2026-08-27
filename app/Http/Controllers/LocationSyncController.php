@@ -13,7 +13,7 @@ class LocationSyncController extends Controller
     {
         $user = auth()->user();
 
-        // 1. Fetch location: pehle ghl_location_id match karein, otherwise fallback to user_id
+    
         $location = null;
         $userLocationId = $user->ghl_location_id ?: $user->location_id;
         if (!empty($userLocationId)) {
@@ -24,7 +24,7 @@ class LocationSyncController extends Controller
             $location = GhlLocation::where('user_id', $user->id)->first();
         }
 
-        // Check missing location or missing OAuth tokens
+      
         if (!$location || empty($location->access_token) || empty($location->refresh_token)) {
             return $this->errorResponse($request, 'OAuth tokens missing or location not connected.', 401);
         }
@@ -36,7 +36,7 @@ class LocationSyncController extends Controller
 
         if ($isExpired) {
             try {
-                // Refresh Token Call to GHL API
+          
                 $response = Http::asForm()->post('https://services.leadconnectorhq.com/oauth/token', [
                     'client_id'     => config('services.marketplace.client_id'),
                     'client_secret' => config('services.marketplace.client_secret'),
@@ -55,7 +55,6 @@ class LocationSyncController extends Controller
 
                 $data = $response->json();
 
-                // 3. Save NEW Access Token, Refresh Token and Expiration
                 if (empty($data['access_token'])) {
                     throw new \RuntimeException('GoHighLevel returned no access token.');
                 }
@@ -80,17 +79,27 @@ class LocationSyncController extends Controller
         //     Log::warning('GHL Details Sync Warning: ' . $e->getMessage());
         // }
 
-         // 4. Fetch/Sync latest Location Data from GHL API using active token
+        // 4. Fetch and persist the latest GHL users using the active token
         try {
-           $users = SyncLocationDetailsService::syncUsers($location);
-           dd($users);
+            $syncedUsersCount = SyncLocationDetailsService::syncUsers($location);
         } catch (\Exception $e) {
-            Log::warning('GHL Details Sync Warning: ' . $e->getMessage());
+            Log::error('GHL Users Sync Failed', ['error' => $e->getMessage()]);
+
+            if (str_contains($e->getMessage(), 'not authorized for this scope')) {
+                return $this->errorResponse(
+                    $request,
+                    'GHL users permission missing. Please reconnect the location to grant users.readonly access.',
+                    403
+                );
+            }
+
+            return $this->errorResponse($request, 'Unable to sync GHL users.', 502);
         }
 
         $result = [
             'status'     => 'success',
-            'message'    => 'Location synced successfully!',
+            'message'    => "Location synced successfully! {$syncedUsersCount} users saved.",
+            'synced_users_count' => $syncedUsersCount,
             'expires_at' => $location->fresh()->expires_at?->toDateTimeString()
         ];
 
