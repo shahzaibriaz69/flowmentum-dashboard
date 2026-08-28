@@ -63,11 +63,11 @@
                             <div class="flex items-center gap-2 truncate">
                                 <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background-color: {{ $stageColor }}"></span>
                                 <h3 class="font-bold text-xs text-slate-800 dark:text-slate-200 truncate max-w-[130px]">{{ $stage->name }}</h3>
-                                <span class="text-[10px] font-bold text-slate-600 dark:text-slate-400 bg-slate-200/80 dark:bg-slate-800 px-1.5 py-0.5 rounded">
+                                <span data-stage-count class="text-[10px] font-bold text-slate-600 dark:text-slate-400 bg-slate-200/80 dark:bg-slate-800 px-1.5 py-0.5 rounded">
                                     {{ $stageOpportunities->count() }}
                                 </span>
                             </div>
-                            <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 shrink-0">
+                            <span data-stage-total class="text-[11px] font-bold text-slate-500 dark:text-slate-400 shrink-0">
                                 ${{ number_format((float)$totalStageValue) }}
                             </span>
                         </div>
@@ -75,7 +75,7 @@
                         <!-- Card List -->
                         <div class="space-y-2.5 flex-1 min-h-[180px] rounded-xl transition-colors" data-drop-zone>
                             @forelse($stageOpportunities as $opp)
-                                <article draggable="true" data-opportunity-id="{{ $opp->id }}" class="relative bg-white dark:bg-[#161c2b] border-t border-r border-b border-slate-200/90 dark:border-slate-800/80 rounded-xl p-3.5 shadow-sm hover:shadow-md transition-all cursor-grab active:cursor-grabbing group" style="border-left: 4px solid {{ $stageColor }}">
+                                <article draggable="true" data-opportunity-id="{{ $opp->id }}" data-opportunity-value="{{ (float)($opp->monetary_value ?? 0) }}" class="relative bg-white dark:bg-[#161c2b] border-t border-r border-b border-slate-200/90 dark:border-slate-800/80 rounded-xl p-3.5 shadow-sm hover:shadow-md transition-all cursor-grab active:cursor-grabbing group" style="border-left: 4px solid {{ $stageColor }}">
                                     
                                     <div class="flex items-center justify-between gap-2 mb-1">
                                         <span class="text-[10px] font-semibold text-slate-400 dark:text-slate-500 truncate">
@@ -98,7 +98,7 @@
 
                                 </article>
                             @empty
-                                <div class="text-[11px] text-slate-400 dark:text-slate-500 text-center py-8 border border-dashed border-slate-200 dark:border-slate-800/80 rounded-xl">
+                                <div data-empty-stage class="text-[11px] text-slate-400 dark:text-slate-500 text-center py-8 border border-dashed border-slate-200 dark:border-slate-800/80 rounded-xl">
                                     No deals
                                 </div>
                             @endforelse
@@ -169,6 +169,7 @@
 
                 const opportunityId = draggedOpportunityId || event.dataTransfer.getData('text/plain');
                 if (!opportunityId) return;
+                const cardToMove = draggedCard;
 
                 try {
                     const response = await fetch(moveUrl.replace('__OPPORTUNITY__', opportunityId), {
@@ -182,7 +183,30 @@
                     });
 
                     if (response.ok) {
-                        window.location.reload();
+                        const sourceColumn = cardToMove?.closest('[data-stage-id]');
+                        const targetZone = stageColumn.querySelector('[data-drop-zone]');
+                        const sourceZone = sourceColumn?.querySelector('[data-drop-zone]');
+
+                        if (cardToMove && sourceColumn !== stageColumn) {
+                            targetZone.querySelector('[data-empty-stage]')?.remove();
+                            targetZone.appendChild(cardToMove);
+                            sourceZone?.querySelector('[data-empty-stage]')?.remove();
+                            if (sourceZone && !sourceZone.querySelector('[data-opportunity-id]')) {
+                                sourceZone.insertAdjacentHTML('beforeend', '<div data-empty-stage class="text-[11px] text-slate-400 dark:text-slate-500 text-center py-8 border border-dashed border-slate-200 dark:border-slate-800/80 rounded-xl">No deals</div>');
+                            }
+                        }
+
+                        document.querySelectorAll('[data-stage-id]').forEach((column) => {
+                            const zone = column.querySelector('[data-drop-zone]');
+                            const cards = [...(zone?.querySelectorAll('[data-opportunity-id]') ?? [])];
+                            const total = cards.reduce((sum, card) => sum + Number(card.dataset.opportunityValue || 0), 0);
+                            column.querySelector('[data-stage-count]').textContent = cards.length;
+                            column.querySelector('[data-stage-total]').textContent = `$${total.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+                        });
+
+                        cardToMove?.classList.remove('opacity-40');
+                        draggedCard = null;
+                        draggedOpportunityId = null;
                         return;
                     }
                     console.error('Opportunity move failed:', response.status, await response.text());
