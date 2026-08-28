@@ -62,7 +62,10 @@ Route::post("/ghl-webhooks/appointments", function (Request $request) {
         'AppointmentDelete',
         'AppointmentUpdate'
     ];
-
+    Log::info("GHL Appointment Webhook [{$type}]", [
+        'type' => $type,
+        'payload' => $data
+    ]);
     if ($type && in_array($type, $allowedEvents)) {
         Log::info("GHL Appointment Webhook [{$type}]", [
             'type' => $type,
