@@ -56,7 +56,7 @@
                     @endphp
 
                     <!-- Stage Column -->
-                    <div class="w-72 min-w-[280px] bg-slate-100/70 dark:bg-[#111622] border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-3 flex flex-col shrink-0">
+                    <div class="w-72 min-w-[280px] bg-slate-100/70 dark:bg-[#111622] border border-slate-200/80 dark:border-slate-800/80 rounded-2xl p-3 flex flex-col shrink-0" data-stage-id="{{ $stage->ghl_stage_id }}">
                         
                         <!-- Stage Header -->
                         <div class="flex items-center justify-between mb-3 px-1">
@@ -73,9 +73,9 @@
                         </div>
 
                         <!-- Card List -->
-                        <div class="space-y-2.5 flex-1 min-h-[180px]">
+                        <div class="space-y-2.5 flex-1 min-h-[180px] rounded-xl transition-colors" data-drop-zone>
                             @forelse($stageOpportunities as $opp)
-                                <article class="relative bg-white dark:bg-[#161c2b] border-t border-r border-b border-slate-200/90 dark:border-slate-800/80 rounded-xl p-3.5 shadow-sm hover:shadow-md transition-all cursor-pointer group" style="border-left: 4px solid {{ $stageColor }}">
+                                <article draggable="true" data-opportunity-id="{{ $opp->id }}" class="relative bg-white dark:bg-[#161c2b] border-t border-r border-b border-slate-200/90 dark:border-slate-800/80 rounded-xl p-3.5 shadow-sm hover:shadow-md transition-all cursor-grab active:cursor-grabbing group" style="border-left: 4px solid {{ $stageColor }}">
                                     
                                     <div class="flex items-center justify-between gap-2 mb-1">
                                         <span class="text-[10px] font-semibold text-slate-400 dark:text-slate-500 truncate">
@@ -115,3 +115,83 @@
 
     </div>
 </x-dashboard-shell>
+
+<script>
+    (() => {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+        const moveUrl = @json(route('pipeline.opportunities.move', ['opportunity' => '__OPPORTUNITY__']));
+        let draggedCard = null;
+        let draggedOpportunityId = null;
+
+        document.querySelectorAll('[data-opportunity-id]').forEach((card) => {
+            card.addEventListener('dragstart', (event) => {
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', card.dataset.opportunityId);
+                draggedCard = card;
+                draggedOpportunityId = card.dataset.opportunityId;
+                card.classList.add('opacity-40');
+            });
+            card.addEventListener('dragend', () => {
+                card.classList.remove('opacity-40');
+                draggedCard = null;
+                draggedOpportunityId = null;
+            });
+        });
+
+        document.querySelectorAll('[data-stage-id]').forEach((stageColumn) => {
+            const highlight = () => {
+                stageColumn.classList.add('ring-2', 'ring-blue-500/50');
+            };
+            const clearHighlight = () => {
+                stageColumn.classList.remove('ring-2', 'ring-blue-500/50');
+            };
+
+            stageColumn.addEventListener('dragenter', (event) => {
+                if (!draggedOpportunityId) return;
+                event.preventDefault();
+                highlight();
+            });
+            stageColumn.addEventListener('dragover', (event) => {
+                if (!draggedOpportunityId) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = 'move';
+                highlight();
+            });
+            stageColumn.addEventListener('dragleave', (event) => {
+                if (!stageColumn.contains(event.relatedTarget)) {
+                    clearHighlight();
+                }
+            });
+            stageColumn.addEventListener('drop', async (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                clearHighlight();
+
+                const opportunityId = draggedOpportunityId || event.dataTransfer.getData('text/plain');
+                if (!opportunityId) return;
+
+                try {
+                    const response = await fetch(moveUrl.replace('__OPPORTUNITY__', opportunityId), {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': csrfToken,
+                        },
+                        body: JSON.stringify({ stage_id: stageColumn.dataset.stageId }),
+                    });
+
+                    if (response.ok) {
+                        window.location.reload();
+                        return;
+                    }
+                    console.error('Opportunity move failed:', response.status, await response.text());
+                } catch (error) {
+                    console.error('Opportunity move failed:', error);
+                }
+
+                window.alert('Opportunity move failed. Please try again.');
+            });
+        });
+    })();
+</script>
