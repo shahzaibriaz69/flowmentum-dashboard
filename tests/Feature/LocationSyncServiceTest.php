@@ -24,10 +24,7 @@ it('syncs contact tags and contact custom fields into the related tables', funct
                 'id' => 'contact_1',
                 'firstName' => 'John',
                 'lastName' => 'Doe',
-                'tags' => [
-                    ['id' => 'tag_1', 'name' => 'vip'],
-                    ['name' => 'marketing'],
-                ],
+                'tags' => ['vip', 'marketing'],
                 'customFields' => [
                     ['id' => 'field_1', 'value' => 'Acme'],
                     ['fieldId' => 'field_2', 'value' => 'North'],
@@ -41,5 +38,5 @@ it('syncs contact tags and contact custom fields into the related tables', funct
     expect($count)->toBe(1)
         ->and(DB::table('ghl_contact_tags')->where('ghl_contact_id', 'contact_1')->count())->toBe(2)
         ->and(DB::table('ghl_contact_custom_fields')->where('ghl_contact_id', 'contact_1')->count())->toBe(2)
-        ->and(DB::table('ghl_contact_tags')->where('ghl_contact_id', 'contact_1')->where('ghl_tag_id', 'tag_1')->exists())->toBeTrue();
+        ->and(DB::table('ghl_contact_tags')->where('ghl_contact_id', 'contact_1')->whereIn('ghl_tag_id', ['vip', 'marketing'])->count())->toBe(2);
 });

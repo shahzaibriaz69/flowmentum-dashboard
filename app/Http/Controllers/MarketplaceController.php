@@ -469,6 +469,58 @@ class MarketplaceController extends Controller
                         'ghl_company_id'        => $location->ghl_company_id,
                     ]
                 );
+
+                foreach ($contactData['tags'] ?? [] as $tagValue) {
+                    if (is_string($tagValue)) {
+                        $tagId = $tagValue;
+                        $tagName = $tagValue;
+                    } elseif (is_array($tagValue)) {
+                        $tagId = $tagValue['id'] ?? $tagValue['_id'] ?? $tagValue['tagId'] ?? null;
+                        $tagName = $tagValue['name'] ?? $tagValue['tagName'] ?? null;
+                    } else {
+                        continue;
+                    }
+
+                    if (empty($tagId) && empty($tagName)) {
+                        continue;
+                    }
+
+                    $normalizedTagId = (string) ($tagId ?? $tagName);
+                    $normalizedTagName = (string) ($tagName ?? $normalizedTagId);
+
+                    $tagRecord = GhlTag::where('ghl_location_id', (string) $location->ghl_location_id)
+                        ->where(function ($query) use ($normalizedTagId, $normalizedTagName) {
+                            $query->where('ghl_tag_id', $normalizedTagId)
+                                ->orWhere('name', $normalizedTagName);
+                        })
+                        ->first();
+
+                    if ($tagRecord) {
+                        $tagRecord->update([
+                            'ghl_tag_id' => $tagRecord->ghl_tag_id ?: $normalizedTagId,
+                            'name' => $normalizedTagName,
+                        ]);
+                    } else {
+                        $tagRecord = GhlTag::create([
+                            'ghl_location_id' => (string) $location->ghl_location_id,
+                            'ghl_tag_id' => $normalizedTagId,
+                            'name' => $normalizedTagName,
+                        ]);
+                    }
+
+                    DB::table('ghl_contact_tags')->updateOrInsert(
+                        [
+                            'ghl_location_id' => (string) $location->ghl_location_id,
+                            'ghl_contact_id' => (string) $contactId,
+                            'ghl_tag_id' => $tagRecord->ghl_tag_id,
+                        ],
+                        [
+                            'created_at' => now(),
+                            'updated_at' => now(),
+                        ]
+                    );
+                }
+
                 $savedCount++;
             }
 
