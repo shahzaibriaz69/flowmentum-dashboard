@@ -62,16 +62,36 @@ Route::post("/ghl-webhooks/appointments", function (Request $request) {
         'AppointmentDelete',
         'AppointmentUpdate'
     ];
+
+    if ($type && in_array($type, $allowedEvents)) {
+        $location = null;
+
+        if (!empty($data['locationId'] ?? null)) {
+            $location = \App\Models\GhlLocation::where('ghl_location_id', (string) $data['locationId'])->first();
+        }
+
+        if (!$location && !empty($data['location']['id'] ?? null)) {
+            $location = \App\Models\GhlLocation::where('ghl_location_id', (string) $data['location']['id'])->first();
+        }
+
+        if (!$location && !empty($data['appointment']['locationId'] ?? null)) {
+            $location = \App\Models\GhlLocation::where('ghl_location_id', (string) $data['appointment']['locationId'])->first();
+        }
+
+        if ($location) {
+            \App\Services\SyncLocationDetailsService::upsertAppointmentFromWebhook($data['appointment'] ?? $data, $location);
+        } else {
+            Log::warning('GHL Appointment Webhook received without matching location', [
+                'type' => $type,
+                'payload' => $data,
+            ]);
+        }
+    }
+
     Log::info("GHL Appointment Webhook [{$type}]", [
         'type' => $type,
         'payload' => $data
     ]);
-    if ($type && in_array($type, $allowedEvents)) {
-        Log::info("GHL Appointment Webhook [{$type}]", [
-            'type' => $type,
-            'payload' => $data
-        ]);
-    }
 
     return response()->json(['status' => 'success'], 200);
 });

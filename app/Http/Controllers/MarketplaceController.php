@@ -11,9 +11,11 @@ use App\Models\GhlPipeline;
 use App\Models\GhlPipelineStage;
 use App\Models\GhlTag;
 use App\Models\GhlUser;
+use App\Services\SyncLocationDetailsService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -150,6 +152,7 @@ class MarketplaceController extends Controller
             'pipelines'     => $this->syncPipelines($location),
             'contacts'      => $this->syncContacts($location),
             'opportunities' => $this->syncOpportunities($location),
+            'appointments'  => $this->syncAppointments($location),
         ];
     }
 
@@ -589,6 +592,16 @@ class MarketplaceController extends Controller
 
         } catch (\Throwable $e) {
             Log::error('GHL Opportunities DB Save Exception: ' . $e->getMessage() . ' File: ' . $e->getFile() . ':' . $e->getLine());
+            return false;
+        }
+    }
+
+    private function syncAppointments(GhlLocation $location): bool
+    {
+        try {
+            return SyncLocationDetailsService::syncAppointments($location) > 0;
+        } catch (\Throwable $e) {
+            Log::error('GHL Appointments Sync Exception: ' . $e->getMessage());
             return false;
         }
     }
