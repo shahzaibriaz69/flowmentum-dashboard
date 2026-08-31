@@ -79,9 +79,10 @@ class LocationSyncController extends Controller
         //     Log::warning('GHL Details Sync Warning: ' . $e->getMessage());
         // }
 
-        // 4. Fetch and persist the latest GHL users using the active token
+        // 4. Fetch and persist the latest GHL users and contacts using the active token
         try {
             $syncedUsersCount = SyncLocationDetailsService::syncUsers($location);
+            $syncedContactsCount = SyncLocationDetailsService::syncContacts($location);
         } catch (\Exception $e) {
             Log::error('GHL Users Sync Failed', ['error' => $e->getMessage()]);
 
@@ -93,13 +94,14 @@ class LocationSyncController extends Controller
                 );
             }
 
-            return $this->errorResponse($request, 'Unable to sync GHL users.', 502);
+            return $this->errorResponse($request, 'Unable to sync GHL users or contacts.', 502);
         }
 
         $result = [
             'status'     => 'success',
-            'message'    => "Location synced successfully! {$syncedUsersCount} users saved.",
+            'message'    => "Location synced successfully! {$syncedUsersCount} users and {$syncedContactsCount} contacts saved.",
             'synced_users_count' => $syncedUsersCount,
+            'synced_contacts_count' => $syncedContactsCount,
             'expires_at' => $location->fresh()->expires_at?->toDateTimeString()
         ];
 
