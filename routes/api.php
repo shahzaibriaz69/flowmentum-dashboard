@@ -18,6 +18,16 @@ Route::post("/ghl-webhooks/contacts", function (Request $request) {
     ];
 
     if ($type && in_array($type, $allowedEvents)) {
+        $location = $data['locationId'] ?? $data['location']['id'] ?? null;
+
+        if ($location) {
+            $foundLocation = \App\Models\GhlLocation::where('ghl_location_id', (string) $location)->first();
+
+            if ($foundLocation) {
+                \App\Services\SyncLocationDetailsService::upsertContactFromWebhook($data['contact'] ?? $data, $foundLocation);
+            }
+        }
+
         Log::info("GHL Contact Webhook [{$type}]", [
             'type' => $type,
             'payload' => $data
@@ -43,6 +53,16 @@ Route::post("/ghl-webhooks/opportunities", function (Request $request) {
     ];
 
     if ($type && in_array($type, $allowedEvents)) {
+        $location = $data['locationId'] ?? $data['location']['id'] ?? null;
+
+        if ($location) {
+            $foundLocation = \App\Models\GhlLocation::where('ghl_location_id', (string) $location)->first();
+
+            if ($foundLocation) {
+                \App\Services\SyncLocationDetailsService::upsertOpportunityFromWebhook($data['opportunity'] ?? $data, $foundLocation);
+            }
+        }
+
         Log::info("GHL Opportunity Webhook [{$type}]", [
             'type' => $type,
             'payload' => $data

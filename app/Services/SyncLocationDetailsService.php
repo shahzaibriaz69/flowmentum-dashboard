@@ -305,6 +305,74 @@ class SyncLocationDetailsService
         return $savedCount;
     }
 
+    public static function upsertContactFromWebhook(array $contactData, GhlLocation $location): bool
+    {
+        $contactId = $contactData['id'] ?? $contactData['_id'] ?? $contactData['contactId'] ?? null;
+
+        if (empty($contactId)) {
+            return false;
+        }
+
+        GhlContact::updateOrCreate(
+            [
+                'ghl_contact_id' => (string) $contactId,
+                'ghl_location_id' => (string) $location->ghl_location_id,
+            ],
+            [
+                'user_id' => $location->user_id,
+                'first_name' => $contactData['firstName'] ?? null,
+                'last_name' => $contactData['lastName'] ?? null,
+                'name' => $contactData['contactName'] ?? $contactData['name'] ?? null,
+                'email' => $contactData['email'] ?? null,
+                'phone' => $contactData['phone'] ?? null,
+                'city' => $contactData['city'] ?? null,
+                'state' => $contactData['state'] ?? null,
+                'country' => $contactData['country'] ?? null,
+                'postal_code' => $contactData['postalCode'] ?? null,
+                'company' => $contactData['companyName'] ?? $contactData['company'] ?? null,
+                'assigned_to_ghl_user' => $contactData['assignedTo'] ?? null,
+                'source' => $contactData['source'] ?? null,
+                'tags' => $contactData['tags'] ?? [],
+                'custom_fields' => $contactData['customFields'] ?? [],
+                'ghl_company_id' => $location->ghl_company_id,
+                'date_added' => $contactData['dateAdded'] ?? $contactData['date_added'] ?? null,
+                'date_updated' => $contactData['dateUpdated'] ?? $contactData['date_updated'] ?? now(),
+            ]
+        );
+
+        return true;
+    }
+
+    public static function upsertOpportunityFromWebhook(array $opportunityData, GhlLocation $location): bool
+    {
+        $opportunityId = $opportunityData['id'] ?? $opportunityData['_id'] ?? $opportunityData['opportunityId'] ?? null;
+
+        if (empty($opportunityId)) {
+            return false;
+        }
+
+        GhlOpportunity::updateOrCreate(
+            [
+                'ghl_opportunity_id' => (string) $opportunityId,
+                'ghl_location_id' => (string) $location->ghl_location_id,
+            ],
+            [
+                'user_id' => $location->user_id,
+                'ghl_pipeline_id' => $opportunityData['pipelineId'] ?? null,
+                'ghl_pipeline_stage_id' => $opportunityData['pipelineStageId'] ?? $opportunityData['stageId'] ?? null,
+                'ghl_contact_id' => $opportunityData['contactId'] ?? null,
+                'assigned_to_ghl_user' => $opportunityData['assignedTo'] ?? null,
+                'name' => $opportunityData['name'] ?? 'Unnamed Opportunity',
+                'status' => $opportunityData['status'] ?? 'open',
+                'monetary_value' => $opportunityData['monetaryValue'] ?? 0,
+                'source' => $opportunityData['source'] ?? null,
+                'date_added' => $opportunityData['dateAdded'] ?? $opportunityData['date_added'] ?? now(),
+            ]
+        );
+
+        return true;
+    }
+
     public static function upsertAppointmentFromWebhook(array $appointmentData, GhlLocation $location): bool
     {
         $appointmentId = $appointmentData['id'] ?? $appointmentData['_id'] ?? $appointmentData['appointmentId'] ?? null;

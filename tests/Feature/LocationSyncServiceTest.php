@@ -325,3 +325,42 @@ it('stores appointments from all paginated result pages in GHL', function () {
         ->and(DB::table('ghl_appointments')->where('ghl_appointment_id', 'page_1_apt')->exists())->toBeTrue()
         ->and(DB::table('ghl_appointments')->where('ghl_appointment_id', 'page_2_apt')->exists())->toBeTrue();
 });
+
+it('persists contact and opportunity webhooks into the database', function () {
+    $user = User::factory()->create();
+    $location = GhlLocation::create([
+        'user_id' => $user->id,
+        'ghl_location_id' => 'loc_444',
+        'ghl_company_id' => 'company_444',
+        'name' => 'Webhook Contact Opportunity Location',
+        'access_token' => 'token-444',
+        'refresh_token' => 'refresh-444',
+        'expires_at' => now()->addDay(),
+    ]);
+
+    $contactSaved = SyncLocationDetailsService::upsertContactFromWebhook([
+        'id' => 'contact_webhook_1',
+        'firstName' => 'Ali',
+        'lastName' => 'Raza',
+        'email' => 'ali@example.com',
+        'phone' => '123456',
+        'city' => 'Lahore',
+        'companyName' => 'Flowmentum',
+    ], $location);
+
+    $opportunitySaved = SyncLocationDetailsService::upsertOpportunityFromWebhook([
+        'id' => 'opp_webhook_1',
+        'contactId' => 'contact_webhook_1',
+        'pipelineId' => 'pipeline_1',
+        'pipelineStageId' => 'stage_1',
+        'name' => 'New Deal',
+        'status' => 'open',
+        'monetaryValue' => 1250,
+        'source' => 'Website',
+    ], $location);
+
+    expect($contactSaved)->toBeTrue()
+        ->and($opportunitySaved)->toBeTrue()
+        ->and(DB::table('ghl_contacts')->where('ghl_contact_id', 'contact_webhook_1')->exists())->toBeTrue()
+        ->and(DB::table('ghl_opportunities')->where('ghl_opportunity_id', 'opp_webhook_1')->exists())->toBeTrue();
+});
