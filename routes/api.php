@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
 
+// ===== GHL Webhook Routes (accessible at /api/ghl-webhooks/...) =====
 // 1. Contacts Webhook Route
 Route::post("/ghl-webhooks/contacts", function (Request $request) {
     $data = $request->all();
@@ -14,11 +15,11 @@ Route::post("/ghl-webhooks/contacts", function (Request $request) {
         'ContactUpdate',
         'ContactDelete',
         'ContactDndUpdate',
-        'ContactTagUpdate'
+        'ContactTagUpdate',
     ];
 
     if ($type && in_array($type, $allowedEvents)) {
-        $location = $data['locationId'] ?? $data['location']['id'] ?? null;
+        $location = $data['locationId'] ?? ($data['location']['id'] ?? null);
 
         if ($location) {
             $foundLocation = \App\Models\GhlLocation::where('ghl_location_id', (string) $location)->first();
@@ -30,7 +31,7 @@ Route::post("/ghl-webhooks/contacts", function (Request $request) {
 
         Log::info("GHL Contact Webhook [{$type}]", [
             'type' => $type,
-            'payload' => $data
+            'payload' => $data,
         ]);
     }
 
@@ -49,11 +50,11 @@ Route::post("/ghl-webhooks/opportunities", function (Request $request) {
         'OpportunityStatusUpdate',
         'OpportunityAssignedToUpdate',
         'OpportunityMonetaryValueUpdate',
-        'OpportunityStageUpdate'
+        'OpportunityStageUpdate',
     ];
 
     if ($type && in_array($type, $allowedEvents)) {
-        $location = $data['locationId'] ?? $data['location']['id'] ?? null;
+        $location = $data['locationId'] ?? ($data['location']['id'] ?? null);
 
         if ($location) {
             $foundLocation = \App\Models\GhlLocation::where('ghl_location_id', (string) $location)->first();
@@ -65,7 +66,7 @@ Route::post("/ghl-webhooks/opportunities", function (Request $request) {
 
         Log::info("GHL Opportunity Webhook [{$type}]", [
             'type' => $type,
-            'payload' => $data
+            'payload' => $data,
         ]);
     }
 
@@ -80,42 +81,28 @@ Route::post("/ghl-webhooks/appointments", function (Request $request) {
     $allowedEvents = [
         'AppointmentCreate',
         'AppointmentDelete',
-        'AppointmentUpdate'
+        'AppointmentUpdate',
     ];
 
-    if (!$type || in_array($type, $allowedEvents)) {
-        Log::error("GHL Appointment Webhook [{$type}]", [
-            'type' => $type,
-            'payload' => $data
-        ]);
-
-        return response()->json(['status' => 'failed'], 400);
+    if (!$type || !in_array($type, $allowedEvents)) {
+        return response()->json(['status' => 'ignored'], 200);
     }
 
-    $location = $data['locationId'] ??$data['location']['id']??$data['appointment']['locationId']?? null;
+    $locationId = $data['locationId'] ?? ($data['location']['id'] ?? ($data['appointment']['locationId'] ?? null));
 
-    if ($location) {
-        $savedAppointments = \App\Services\SyncLocationDetailsService::upsertAppointmentsFromWebhookPayload($data, $location);
+    if ($locationId) {
+        $foundLocation = \App\Models\GhlLocation::where('ghl_location_id', (string) $locationId)->first();
 
-        Log::info('GHL Appointment Webhook persisted', [
-            'type' => $type,
-            'saved_count' => $savedAppointments,
-            'payload_keys' => array_keys($data),
-        ]);
-    } else {
-        Log::error('GHL Appointment Webhook received without matching location.', [
-            'type' => $type,
-            'payload' => $data,
-        ]);
+        if ($foundLocation) {
+            \App\Services\SyncLocationDetailsService::upsertAppointmentsFromWebhookPayload($data, $foundLocation);
 
-        return response()->json(['status' => 'failed'], 400);
+            Log::info('GHL Appointment Webhook persisted', [
+                'type' => $type,
+                'payload_keys' => array_keys($data),
+            ]);
+        }
     }
-
-
-    Log::info("GHL Appointment Webhook [{$type}]", [
-        'type' => $type,
-        'payload' => $data
-    ]);
 
     return response()->json(['status' => 'success'], 200);
 });
+// ===== End GHL Webhook Routes =====
