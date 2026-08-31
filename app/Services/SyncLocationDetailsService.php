@@ -12,11 +12,12 @@ use App\Models\GhlTag;
 use App\Models\GhlUser;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class SyncLocationDetailsService
 {
 
-    public static function syncLocationDetails(GhlLocation $location)
+    public static function syncLocationDetails(GhlLocation $location): void
     {
         $ghlResponse = Http::withHeaders([
             'Authorization' => 'Bearer ' . $location->access_token,
@@ -269,6 +270,41 @@ class SyncLocationDetailsService
         return $savedCount;
     }
 
+    public static function upsertAppointmentsFromWebhookPayload(array $payload, GhlLocation $location): int
+    {
+        $items = [];
+
+        if (isset($payload['appointment']) && is_array($payload['appointment'])) {
+            $items[] = $payload['appointment'];
+        }
+
+        if (isset($payload['appointments']) && is_array($payload['appointments'])) {
+            $items = array_merge($items, $payload['appointments']);
+        }
+
+        if (isset($payload['data']['appointments']) && is_array($payload['data']['appointments'])) {
+            $items = array_merge($items, $payload['data']['appointments']);
+        }
+
+        if (empty($items) && isset($payload['id']) && is_string($payload['id'])) {
+            $items[] = $payload;
+        }
+
+        $savedCount = 0;
+
+        foreach ($items as $appointmentData) {
+            if (!is_array($appointmentData)) {
+                continue;
+            }
+
+            if (self::upsertAppointmentFromWebhook($appointmentData, $location)) {
+                $savedCount++;
+            }
+        }
+
+        return $savedCount;
+    }
+
     public static function upsertAppointmentFromWebhook(array $appointmentData, GhlLocation $location): bool
     {
         $appointmentId = $appointmentData['id'] ?? $appointmentData['_id'] ?? $appointmentData['appointmentId'] ?? null;
@@ -320,7 +356,7 @@ class SyncLocationDetailsService
         ]);
 
         if (!$calendarsResponse->successful()) {
-            logger()->warning('GHL calendars sync skipped', [
+            Log::warning('GHL calendars sync skipped', [
                 'status' => $calendarsResponse->status(),
                 'body' => $calendarsResponse->body(),
                 'location_id' => $location->ghl_location_id,
@@ -348,6 +384,9 @@ class SyncLocationDetailsService
             $calendars = [$calendars];
         }
 
+        $startTime = now()->subYear()->timestamp * 1000;
+        $endTime = now()->addYear()->timestamp * 1000;
+
         foreach ($calendars as $calendarData) {
             if (!is_array($calendarData)) {
                 continue;
@@ -370,80 +409,101 @@ class SyncLocationDetailsService
                 ]
             );
 
-            $eventsResponse = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $location->access_token,
-                'Version' => '2021-07-28',
-                'Accept' => 'application/json',
-            ])->get("https://services.leadconnectorhq.com/calendars/{$calendarId}/events", [
-                'locationId' => $location->ghl_location_id,
-            ]);
+            $pageToken = null;
+            $previousToken = null;
 
-            if (!$eventsResponse->successful()) {
-                continue;
-            }
+            do {
+                $fetchParams = [
+                    'locationId' => $location->ghl_location_id,
+                    'startTime' => $startTime,
+                    'endTime' => $endTime,
+                    'limit' => 100,
+                ];
 
-            $eventPayload = $eventsResponse->json('events', $eventsResponse->json('appointments', $eventsResponse->json('data', [])));
-
-            if (is_array($eventPayload) && isset($eventPayload['events']) && is_array($eventPayload['events'])) {
-                $eventPayload = $eventPayload['events'];
-            }
-
-            if (is_array($eventPayload) && isset($eventPayload['appointments']) && is_array($eventPayload['appointments'])) {
-                $eventPayload = $eventPayload['appointments'];
-            }
-
-            if (is_array($eventPayload) && isset($eventPayload['items']) && is_array($eventPayload['items'])) {
-                $eventPayload = $eventPayload['items'];
-            }
-
-            $eventItems = is_array($eventPayload) ? $eventPayload : [];
-
-            foreach ($eventItems as $eventData) {
-                if (!is_array($eventData)) {
-                    continue;
+                if (!empty($pageToken)) {
+                    $fetchParams['pageToken'] = $pageToken;
                 }
 
-                $eventId = $eventData['id'] ?? $eventData['_id'] ?? $eventData['eventId'] ?? $eventData['appointmentId'] ?? $eventData['appointment_id'] ?? null;
+                $eventsResponse = Http::withHeaders([
+                    'Authorization' => 'Bearer ' . $location->access_token,
+                    'Version' => '2021-07-28',
+                    'Accept' => 'application/json',
+                ])->get("https://services.leadconnectorhq.com/calendars/{$calendarId}/events", $fetchParams);
 
-                if (empty($eventId)) {
-                    continue;
+                if (!$eventsResponse->successful()) {
+                    Log::error('Failed fetching events for calendar: ' . $calendarId, [
+                        'status' => $eventsResponse->status(),
+                        'body' => $eventsResponse->body(),
+                    ]);
+                    break;
                 }
 
-                $contactId = $eventData['contactId']
-                    ?? $eventData['contact_id']
-                    ?? $eventData['contact']['id'] ?? $eventData['contact']['_id'] ?? $eventData['contactId'] ?? null;
+                $eventPayload = $eventsResponse->json('events', $eventsResponse->json('appointments', $eventsResponse->json('data', [])));
 
-                if (is_array($eventData['contact'] ?? null) && empty($contactId)) {
-                    $contactId = $eventData['contact']['id'] ?? $eventData['contact']['_id'] ?? null;
+                if (is_array($eventPayload) && isset($eventPayload['events']) && is_array($eventPayload['events'])) {
+                    $eventPayload = $eventPayload['events'];
                 }
 
-                GhlAppointment::updateOrCreate(
-                    [
-                        'ghl_appointment_id' => (string) $eventId,
-                    ],
-                    [
-                        'user_id' => $location->user_id,
-                        'ghl_location_id' => (string) $location->ghl_location_id,
-                        'ghl_company_id' => $location->ghl_company_id,
-                        'ghl_contact_id' => $contactId,
-                        'calendar_id' => (string) $calendarId,
-                        'assigned_to_ghl_user' => $eventData['assignedTo'] ?? $eventData['assigned_to'] ?? null,
-                        'title' => $eventData['title'] ?? $eventData['name'] ?? null,
-                        'address' => $eventData['address'] ?? null,
-                        'status' => $eventData['status'] ?? null,
-                        'ghl_group_id' => $eventData['groupId'] ?? $eventData['group_id'] ?? null,
-                        'users' => $eventData['users'] ?? $eventData['guests'] ?? [],
-                        'notes' => $eventData['notes'] ?? $eventData['description'] ?? null,
-                        'source' => $eventData['source'] ?? null,
-                        'start_time' => $eventData['startTime'] ?? $eventData['start_time'] ?? $eventData['startDateTime'] ?? null,
-                        'end_time' => $eventData['endTime'] ?? $eventData['end_time'] ?? $eventData['endDateTime'] ?? null,
-                        'date_added' => $eventData['dateAdded'] ?? $eventData['date_added'] ?? null,
-                        'date_updated' => $eventData['dateUpdated'] ?? $eventData['date_updated'] ?? null,
-                    ]
-                );
+                if (is_array($eventPayload) && isset($eventPayload['appointments']) && is_array($eventPayload['appointments'])) {
+                    $eventPayload = $eventPayload['appointments'];
+                }
 
-                $savedCount++;
-            }
+                if (is_array($eventPayload) && isset($eventPayload['items']) && is_array($eventPayload['items'])) {
+                    $eventPayload = $eventPayload['items'];
+                }
+
+                $eventItems = is_array($eventPayload) ? $eventPayload : [];
+
+                foreach ($eventItems as $eventData) {
+                    if (!is_array($eventData)) {
+                        continue;
+                    }
+
+                    $eventId = $eventData['id'] ?? $eventData['_id'] ?? $eventData['eventId'] ?? $eventData['appointmentId'] ?? $eventData['appointment_id'] ?? null;
+
+                    if (empty($eventId)) {
+                        continue;
+                    }
+
+                    $contactId = $eventData['contactId']
+                        ?? $eventData['contact_id']
+                        ?? ($eventData['contact']['id'] ?? $eventData['contact']['_id'] ?? null);
+
+                    GhlAppointment::updateOrCreate(
+                        [
+                            'ghl_appointment_id' => (string) $eventId,
+                        ],
+                        [
+                            'user_id' => $location->user_id,
+                            'ghl_location_id' => (string) $location->ghl_location_id,
+                            'ghl_company_id' => $location->ghl_company_id,
+                            'ghl_contact_id' => $contactId,
+                            'calendar_id' => (string) $calendarId,
+                            'assigned_to_ghl_user' => $eventData['assignedTo'] ?? $eventData['assigned_to'] ?? null,
+                            'title' => $eventData['title'] ?? $eventData['name'] ?? null,
+                            'address' => $eventData['address'] ?? null,
+                            'status' => $eventData['status'] ?? null,
+                            'ghl_group_id' => $eventData['groupId'] ?? $eventData['group_id'] ?? null,
+                            'users' => $eventData['users'] ?? $eventData['guests'] ?? [],
+                            'notes' => $eventData['notes'] ?? $eventData['description'] ?? null,
+                            'source' => $eventData['source'] ?? null,
+                            'start_time' => $eventData['startTime'] ?? $eventData['start_time'] ?? $eventData['startDateTime'] ?? null,
+                            'end_time' => $eventData['endTime'] ?? $eventData['end_time'] ?? $eventData['endDateTime'] ?? null,
+                            'date_added' => $eventData['dateAdded'] ?? $eventData['date_added'] ?? null,
+                            'date_updated' => $eventData['dateUpdated'] ?? $eventData['date_updated'] ?? null,
+                        ]
+                    );
+
+                    $savedCount++;
+                }
+
+                $previousToken = $pageToken;
+                $pageToken = $eventsResponse->json('nextPageToken')
+                    ?? $eventsResponse->json('next_page_token')
+                    ?? $eventsResponse->json('pageToken')
+                    ?? null;
+
+            } while (!empty($pageToken) && $pageToken !== $previousToken);
         }
 
         return $savedCount;

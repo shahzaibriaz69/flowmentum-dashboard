@@ -6,7 +6,6 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Enums\RoleEnum;
-use App\Enums\RolesEnum;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -62,16 +61,37 @@ class User extends Authenticatable
         return $this->hasOne(GhlUser::class);
     }
 
-    public function getLocationIdAttribute(): string
+    public function IsAgency(): bool
     {
-        $locationId = $this->attributes['location_id'] ?? null;
+        return $this->hasRole(RoleEnum::AGENCY->value);
+    }
 
-        if ($locationId) {
-            return (string) $locationId;
+    public function IsLocation(): bool
+    {
+        return $this->hasRole(RoleEnum::AGENCY->value);
+    }
+
+    public function IsGhlUser(): bool
+    {
+        return $this->hasRole([RoleEnum::USER->value, RoleEnum::ADMIN->value]);
+    }
+
+    public function getLocationIdsAttribute(): array
+    {
+        if ($this->IsLocation()) {
+            return [
+                (GhlLocation::where('user_id', $this->getKey())
+                    ->value('ghl_location_id') ?? '')
+            ];
         }
 
-        return (string) (GhlLocation::where('user_id', $this->getKey())
-            ->value('ghl_location_id') ?? '');
+        if ($this->IsGhlUser()) {
+            return 
+                (GhlUser::where('user_id', $this->getKey())
+                    ->value('ghl_location_ids') ?? '');
+        }
+
+        return [];
     }
 
     /**

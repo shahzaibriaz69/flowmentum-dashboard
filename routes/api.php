@@ -63,30 +63,34 @@ Route::post("/ghl-webhooks/appointments", function (Request $request) {
         'AppointmentUpdate'
     ];
 
-    if ($type && in_array($type, $allowedEvents)) {
-        $location = null;
+    if (!$type || in_array($type, $allowedEvents)) {
+        Log::error("GHL Appointment Webhook [{$type}]", [
+            'type' => $type,
+            'payload' => $data
+        ]);
 
-        if (!empty($data['locationId'] ?? null)) {
-            $location = \App\Models\GhlLocation::where('ghl_location_id', (string) $data['locationId'])->first();
-        }
-
-        if (!$location && !empty($data['location']['id'] ?? null)) {
-            $location = \App\Models\GhlLocation::where('ghl_location_id', (string) $data['location']['id'])->first();
-        }
-
-        if (!$location && !empty($data['appointment']['locationId'] ?? null)) {
-            $location = \App\Models\GhlLocation::where('ghl_location_id', (string) $data['appointment']['locationId'])->first();
-        }
-
-        if ($location) {
-            \App\Services\SyncLocationDetailsService::upsertAppointmentFromWebhook($data['appointment'] ?? $data, $location);
-        } else {
-            Log::warning('GHL Appointment Webhook received without matching location', [
-                'type' => $type,
-                'payload' => $data,
-            ]);
-        }
+        return response()->json(['status' => 'failed'], 400);
     }
+
+    $location = $data['locationId'] ??$data['location']['id']??$data['appointment']['locationId']?? null;
+
+    if ($location) {
+        $savedAppointments = \App\Services\SyncLocationDetailsService::upsertAppointmentsFromWebhookPayload($data, $location);
+
+        Log::info('GHL Appointment Webhook persisted', [
+            'type' => $type,
+            'saved_count' => $savedAppointments,
+            'payload_keys' => array_keys($data),
+        ]);
+    } else {
+        Log::error('GHL Appointment Webhook received without matching location.', [
+            'type' => $type,
+            'payload' => $data,
+        ]);
+
+        return response()->json(['status' => 'failed'], 400);
+    }
+
 
     Log::info("GHL Appointment Webhook [{$type}]", [
         'type' => $type,

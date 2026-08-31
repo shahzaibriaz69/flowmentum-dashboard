@@ -222,3 +222,106 @@ it('persists a new or updated GHL appointment webhook payload to the database', 
         ->and(DB::table('ghl_appointments')->where('ghl_appointment_id', 'webhook_apt_1')->value('title'))->toBe('Updated Booking')
         ->and(DB::table('ghl_appointments')->where('ghl_appointment_id', 'webhook_apt_1')->value('ghl_contact_id'))->toBe('contact_abc');
 });
+
+it('stores multiple appointment records from a single webhook payload', function () {
+    $user = User::factory()->create();
+    $location = GhlLocation::create([
+        'user_id' => $user->id,
+        'ghl_location_id' => 'loc_333',
+        'ghl_company_id' => 'company_333',
+        'name' => 'Webhook Bulk Location',
+        'access_token' => 'token-333',
+        'refresh_token' => 'refresh-333',
+        'expires_at' => now()->addDay(),
+    ]);
+
+    $saved = SyncLocationDetailsService::upsertAppointmentsFromWebhookPayload([
+        'appointments' => [
+            [
+                'id' => 'webhook_bulk_1',
+                'contact' => ['id' => 'contact_bulk_1'],
+                'title' => 'Bulk 1',
+                'status' => 'scheduled',
+                'startDateTime' => '2026-08-31T12:00:00Z',
+                'endDateTime' => '2026-08-31T12:30:00Z',
+            ],
+            [
+                'id' => 'webhook_bulk_2',
+                'contact' => ['id' => 'contact_bulk_2'],
+                'title' => 'Bulk 2',
+                'status' => 'scheduled',
+                'startDateTime' => '2026-08-31T13:00:00Z',
+                'endDateTime' => '2026-08-31T13:30:00Z',
+            ],
+        ],
+    ], $location);
+
+    expect($saved)->toBe(2)
+        ->and(DB::table('ghl_appointments')->where('ghl_appointment_id', 'webhook_bulk_1')->exists())->toBeTrue()
+        ->and(DB::table('ghl_appointments')->where('ghl_appointment_id', 'webhook_bulk_2')->exists())->toBeTrue();
+});
+
+it('stores appointments from all paginated result pages in GHL', function () {
+    $user = User::factory()->create();
+    $location = GhlLocation::create([
+        'user_id' => $user->id,
+        'ghl_location_id' => 'loc_222',
+        'ghl_company_id' => 'company_222',
+        'name' => 'Paginated Location',
+        'access_token' => 'token-222',
+        'refresh_token' => 'refresh-222',
+        'expires_at' => now()->addDay(),
+    ]);
+
+    $calls = 0;
+
+    Http::fake(function ($request) use (&$calls) {
+        $url = $request->url();
+
+        if (str_contains($url, '/calendars?')) {
+            return Http::response([
+                'calendars' => [[
+                    'id' => 'calendar_3',
+                    'name' => 'Paginated Calendar',
+                ]],
+            ], 200);
+        }
+
+        if (str_contains($url, '/calendars/calendar_3/events')) {
+            $calls++;
+
+            if ($calls === 1) {
+                return Http::response([
+                    'appointments' => [[
+                        'id' => 'page_1_apt',
+                        'contact' => ['id' => 'contact_1'],
+                        'title' => 'Page 1',
+                        'status' => 'scheduled',
+                        'startDateTime' => '2026-08-31T09:00:00Z',
+                        'endDateTime' => '2026-08-31T09:30:00Z',
+                    ]],
+                    'nextPageToken' => 'page-2',
+                ], 200);
+            }
+
+            return Http::response([
+                'appointments' => [[
+                    'id' => 'page_2_apt',
+                    'contact' => ['id' => 'contact_2'],
+                    'title' => 'Page 2',
+                    'status' => 'scheduled',
+                    'startDateTime' => '2026-08-31T10:00:00Z',
+                    'endDateTime' => '2026-08-31T10:30:00Z',
+                ]],
+            ], 200);
+        }
+
+        return Http::response([], 404);
+    });
+
+    $count = SyncLocationDetailsService::syncAppointments($location);
+
+    expect($count)->toBe(2)
+        ->and(DB::table('ghl_appointments')->where('ghl_appointment_id', 'page_1_apt')->exists())->toBeTrue()
+        ->and(DB::table('ghl_appointments')->where('ghl_appointment_id', 'page_2_apt')->exists())->toBeTrue();
+});
