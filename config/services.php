@@ -41,6 +41,7 @@ return [
         'callback_url' => env('MARKETPLACE_CALLBACK_URL', env('APP_URL') . '/authorization/marketplace/callback'),
         'authorize_url' => 'https://marketplace.gohighlevel.com/oauth/chooselocation',
         'token_url' => 'https://services.leadconnectorhq.com/oauth/token',
+        'access_token' => env('GHL_ACCESS_TOKEN'),
     ],
 
 ];

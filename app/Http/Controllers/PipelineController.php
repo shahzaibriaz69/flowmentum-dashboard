@@ -8,6 +8,8 @@ use App\Models\GhlStageChangeLog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class PipelineController extends Controller
 {
@@ -15,9 +17,9 @@ class PipelineController extends Controller
     {
         $user = $request->user();
 
-        $locationId = session('active_location_id') 
-            ?? $user->ghl_location_id 
-            ?? $user->location_id 
+        $locationId = session('active_location_id')
+            ?? $user->ghl_location_id
+            ?? $user->location_id
             ?? null;
 
         $pipelines = GhlPipeline::when($locationId, function ($q) use ($locationId) {
@@ -28,7 +30,7 @@ class PipelineController extends Controller
             $pipelines = GhlPipeline::all();
         }
 
-        $selectedPipelineId = $request->query('pipeline_id') 
+        $selectedPipelineId = $request->query('pipeline_id')
             ?? $pipelines->first()?->ghl_pipeline_id;
 
         $activePipeline = null;
@@ -47,11 +49,10 @@ class PipelineController extends Controller
                 ->first();
         }
 
-        // View name updated to 'pipeline' to match your resources/views/pipeline.blade.php
         return view('pipeline', [
-            'pipelines'          => $pipelines,
-            'activePipeline'     => $activePipeline,
-            'currentPipeline'    => $activePipeline,
+            'pipelines' => $pipelines,
+            'activePipeline' => $activePipeline,
+            'currentPipeline' => $activePipeline,
             'selectedPipelineId' => $selectedPipelineId,
         ]);
     }
@@ -85,6 +86,7 @@ class PipelineController extends Controller
 
         $fromStageId = $opportunity->ghl_pipeline_stage_id;
 
+        // 1. Local Database Transaction & Log Entry
         DB::transaction(function () use ($opportunity, $targetStage, $fromStageId, $locationId): void {
             $opportunity->update([
                 'ghl_pipeline_stage_id' => $targetStage->ghl_stage_id,
@@ -100,9 +102,60 @@ class PipelineController extends Controller
             ]);
         });
 
+        // 2. Real-time Push to GoHighLevel (GHL API v2)
+        $this->syncOpportunityStageToGhl($opportunity, $targetStage->ghl_stage_id, $user);
+
         return response()->json([
-            'message' => 'Opportunity moved successfully.',
+            'message' => 'Opportunity moved and synced with GHL successfully.',
             'stage_id' => $targetStage->ghl_stage_id,
         ]);
+    }
+
+    /**
+     * Private helper to push stage update to GoHighLevel API
+     */
+    private function syncOpportunityStageToGhl(GhlOpportunity $opportunity, string $newStageId, $user): void
+    {
+        $tokenRecord = null;
+
+        // Database table exist karti hai toh access token fetch karein
+        if (\Schema::hasTable('ghl_tokens')) {
+            $tokenRecord = \DB::table('ghl_tokens')
+                ->where('location_id', $opportunity->ghl_location_id)
+                ->first();
+        }
+
+        // Access Token Fallback Sequence
+        $accessToken = session('ghl_access_token')
+            ?? $user->ghl_access_token
+            ?? $tokenRecord?->access_token
+            ?? config('services.marketplace.access_token');
+
+        if (!$accessToken) {
+            Log::warning("GHL Sync Skipped: No Access Token found for Opportunity {$opportunity->ghl_opportunity_id}");
+            return;
+        }
+
+        try {
+            $response = Http::timeout(10)->retry(3, 100)->withHeaders([
+                'Authorization' => 'Bearer ' . $accessToken,
+                'Version' => '2021-07-28',
+                'Content-Type' => 'application/json',
+                'Accept' => 'application/json',
+            ])->put("https://services.gohighlevel.com/v2/opportunities/{$opportunity->ghl_opportunity_id}", [
+                        'pipelineId' => $opportunity->ghl_pipeline_id,
+                        'pipelineStageId' => $newStageId,
+                        'name' => $opportunity->name,
+                        'status' => $opportunity->status ?? 'open',
+                    ]);
+
+            if ($response->successful()) {
+                Log::info("GHL Stage Synced Successfully for Opp ID: {$opportunity->ghl_opportunity_id}");
+            } else {
+                Log::error("GHL Stage Update Failed for Opp ID {$opportunity->ghl_opportunity_id}: " . $response->body());
+            }
+        } catch (\Exception $e) {
+            Log::error("GHL API Exception: " . $e->getMessage());
+        }
     }
 }
