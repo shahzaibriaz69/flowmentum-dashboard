@@ -62,94 +62,190 @@ class PipelineController extends Controller
         ]);
     }
 
-    public function moveOpportunity(Request $request, GhlOpportunity $opportunity): JsonResponse
+    public function moveOpportunity(Request $request, $opportunityId): JsonResponse
     {
-        $validated = $request->validate([
-            'stage_id' => ['required', 'string'],
-        ]);
+        try {
+            $validated = $request->validate([
+                'stage_id' => ['required', 'string'],
+            ]);
 
-        $user = $request->user();
-        $locationId = $request->attributes->get('active_location_id')
-            ?? $user->ghl_location_id
-            ?? $user->location_id
-            ?? null;
+            $opportunity = GhlOpportunity::where('id', $opportunityId)
+                ->orWhere('ghl_opportunity_id', $opportunityId)
+                ->first();
 
-        abort_unless(
-            !$locationId || $opportunity->ghl_location_id === $locationId,
-            404
-        );
+            if (!$opportunity) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Opportunity record not found.'
+                ], 404);
+            }
 
-        $targetStage = $opportunity->pipeline
-            ? $opportunity->pipeline->stages()->where('ghl_stage_id', $validated['stage_id'])->first()
-            : null;
+            $user = $request->user();
+            $locationId = $request->attributes->get('active_location_id')
+                ?? $user->ghl_location_id
+                ?? $user->location_id
+                ?? null;
 
-        abort_unless($targetStage, 422, 'The selected stage does not belong to this pipeline.');
+            $targetStage = $opportunity->pipeline
+                ? $opportunity->pipeline->stages()->where('ghl_stage_id', $validated['stage_id'])->first()
+                : null;
 
-        if ($opportunity->ghl_pipeline_stage_id === $targetStage->ghl_stage_id) {
-            return response()->json(['message' => 'Opportunity is already in this stage.']);
+            if (!$targetStage) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The selected stage does not belong to this pipeline.'
+                ], 422);
+            }
+
+            if ($opportunity->ghl_pipeline_stage_id === $targetStage->ghl_stage_id) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Opportunity is already in this stage.'
+                ]);
+            }
+
+            $fromStageId = $opportunity->ghl_pipeline_stage_id;
+
+            DB::transaction(function () use ($opportunity, $targetStage, $fromStageId, $locationId): void {
+                $opportunity->update([
+                    'ghl_pipeline_stage_id' => $targetStage->ghl_stage_id,
+                ]);
+
+                GhlStageChangeLog::create([
+                    'ghl_location_id' => $locationId ?? $opportunity->ghl_location_id,
+                    'ghl_opportunity_stage_id' => $opportunity->ghl_opportunity_id,
+                    'ghl_pipeline_id' => $opportunity->ghl_pipeline_id,
+                    'from_stage_id' => $fromStageId,
+                    'to_stage_id' => $targetStage->ghl_stage_id,
+                    'changed_at' => now(),
+                ]);
+            });
+
+           
+            $ghlSynced = $this->syncOpportunityStageToGhl($opportunity, $targetStage->ghl_stage_id);
+
+            return response()->json([
+                'success'    => true,
+                'message'    => $ghlSynced 
+                    ? 'Opportunity moved locally and synced with GHL.' 
+                    : 'Opportunity moved locally, but GHL sync failed.',
+                'ghl_synced' => $ghlSynced,
+                'stage_id'   => $targetStage->ghl_stage_id,
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Move Opportunity Exception: " . $e->getMessage(), [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Server Error: ' . $e->getMessage()
+            ], 500);
         }
-
-        $fromStageId = $opportunity->ghl_pipeline_stage_id;
-
-        // 1. Local Database Transaction & Log Entry
-        DB::transaction(function () use ($opportunity, $targetStage, $fromStageId, $locationId): void {
-            $opportunity->update([
-                'ghl_pipeline_stage_id' => $targetStage->ghl_stage_id,
-            ]);
-
-            GhlStageChangeLog::create([
-                'ghl_location_id' => $locationId ?? $opportunity->ghl_location_id,
-                'ghl_opportunity_stage_id' => $opportunity->ghl_opportunity_id,
-                'ghl_pipeline_id' => $opportunity->ghl_pipeline_id,
-                'from_stage_id' => $fromStageId,
-                'to_stage_id' => $targetStage->ghl_stage_id,
-                'changed_at' => now(),
-            ]);
-        });
-
-        // 2. Real-time Push to GoHighLevel (GHL API v2)
-        $this->syncOpportunityStageToGhl($opportunity, $targetStage->ghl_stage_id);
-
-        return response()->json([
-            'message' => 'Opportunity moved and synced with GHL successfully.',
-            'stage_id' => $targetStage->ghl_stage_id,
-        ]);
     }
 
-    /**
-     * Private helper to push stage update to GoHighLevel API
-     */
-    private function syncOpportunityStageToGhl(GhlOpportunity $opportunity, string $newStageId): void
+   
+    private function syncOpportunityStageToGhl(GhlOpportunity $opportunity, string $newStageId): bool
     {
-        $accessToken = GhlLocation::where('ghl_location_id', $opportunity->ghl_location_id)
-            ->value('access_token')
-            ?? config('services.marketplace.access_token');
+        // 1. Location-specific token fetching
+        $location = GhlLocation::where('ghl_location_id', $opportunity->ghl_location_id)->first();
+        $accessToken = $this->getValidAccessToken($location);
 
-        if (!$accessToken) {
+        if (blank($accessToken)) {
             Log::warning("GHL Sync Skipped: No Access Token found for Opportunity {$opportunity->ghl_opportunity_id}");
-            return;
+            return false;
         }
 
         try {
-            $response = Http::timeout(10)->retry(3, 100)->withHeaders([
-                'Authorization' => 'Bearer ' . $accessToken,
-                'Version' => '2021-07-28',
-                'Content-Type' => 'application/json',
-                'Accept' => 'application/json',
-            ])->put("https://services.leadconnectorhq.com/v2/opportunities/{$opportunity->ghl_opportunity_id}", [
-                        'pipelineId' => $opportunity->ghl_pipeline_id,
-                        'pipelineStageId' => $newStageId,
-                        'name' => $opportunity->name,
-                        'status' => $opportunity->status ?? 'open',
-                    ]);
+            $url = "https://services.leadconnectorhq.com/opportunities/{$opportunity->ghl_opportunity_id}";
+
+            $payload = [
+                'pipelineId'      => $opportunity->ghl_pipeline_id,
+                'pipelineStageId' => $newStageId,
+                'name'            => $opportunity->name,
+                'status'          => $opportunity->status ?? 'open',
+            ];
+
+            $response = $this->sendGhlOpportunityUpdate($url, $payload, $accessToken);
+
+            if ($response->status() === 401 && $location && $this->refreshGhlToken($location)) {
+                $response = $this->sendGhlOpportunityUpdate($url, $payload, $location->access_token);
+            }
 
             if ($response->successful()) {
                 Log::info("GHL Stage Synced Successfully for Opp ID: {$opportunity->ghl_opportunity_id}");
-            } else {
-                Log::error("GHL Stage Update Failed for Opp ID {$opportunity->ghl_opportunity_id}: " . $response->body());
+                return true;
             }
+
+            
+            Log::error("GHL Stage Update Failed [{$response->status()}] for Opp ID: {$opportunity->ghl_opportunity_id}", [
+                'url'           => $url,
+                'response_body' => $response->json() ?? $response->body(),
+                'location_id'   => $opportunity->ghl_location_id,
+            ]);
+
+            return false;
+
         } catch (\Exception $e) {
-            Log::error("GHL API Exception: " . $e->getMessage());
+            Log::error("GHL API Exception: " . $e->getMessage(), [
+                'opportunity_id' => $opportunity->ghl_opportunity_id,
+                'target_stage'   => $newStageId,
+            ]);
+            return false;
         }
+    }
+
+    private function sendGhlOpportunityUpdate(string $url, array $payload, string $accessToken)
+    {
+        return Http::timeout(10)
+            ->withHeaders([
+                'Authorization' => 'Bearer ' . $accessToken,
+                'Version'       => 'v3',
+                'Content-Type'  => 'application/json',
+                'Accept'        => 'application/json',
+            ])
+            ->put($url, $payload);
+    }
+
+    private function getValidAccessToken(?GhlLocation $location): ?string
+    {
+        if (!$location) {
+            return config('services.marketplace.access_token');
+        }
+
+        if ($location->expires_at?->isPast() && !$this->refreshGhlToken($location)) {
+            return null;
+        }
+
+        return $location->access_token;
+    }
+
+    private function refreshGhlToken(GhlLocation $location): bool
+    {
+        if (blank($location->refresh_token)) {
+            return false;
+        }
+
+        $response = Http::asForm()->post(config('services.marketplace.token_url'), [
+            'grant_type'    => 'refresh_token',
+            'client_id'     => config('services.marketplace.client_id'),
+            'client_secret' => config('services.marketplace.client_secret'),
+            'refresh_token' => $location->refresh_token,
+        ]);
+
+        if (!$response->successful() || blank($response->json('access_token'))) {
+            Log::error('GHL Token Refresh Failed: ' . $response->body());
+            return false;
+        }
+
+        $location->update([
+            'access_token'  => $response->json('access_token'),
+            'refresh_token' => $response->json('refresh_token', $location->refresh_token),
+            'expires_at'    => now()->addSeconds((int) $response->json('expires_in', 86400)),
+        ]);
+
+        return true;
     }
 }
