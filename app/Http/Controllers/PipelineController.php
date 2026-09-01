@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\GhlPipeline;
+use App\Models\GhlLocation;
 use App\Models\GhlOpportunity;
 use App\Models\GhlStageChangeLog;
 use Illuminate\Http\JsonResponse;
@@ -17,21 +18,25 @@ class PipelineController extends Controller
     {
         $user = $request->user();
 
-        $locationId = session('active_location_id')
-            ?? $user->ghl_location_id
-            ?? $user->location_id
-            ?? null;
+        $locationIds = $user->locationIds ?? [];
 
-        $pipelines = GhlPipeline::when($locationId, function ($q) use ($locationId) {
-            return $q->where('ghl_location_id', $locationId);
+        $pipelines = GhlPipeline::when(!empty($locationIds), function ($q) use ($locationIds) {
+            return $q->whereIn('ghl_location_id', $locationIds);
         })->get();
 
         if ($pipelines->isEmpty()) {
             $pipelines = GhlPipeline::all();
         }
 
+        $defaultPipeline = $pipelines->first(function (GhlPipeline $pipeline) {
+            $pipelineName = strtolower((string) $pipeline->name);
+
+            return str_contains($pipelineName, 'appoin')
+                && str_contains($pipelineName, 'test');
+        }) ?? $pipelines->first();
+
         $selectedPipelineId = $request->query('pipeline_id')
-            ?? $pipelines->first()?->ghl_pipeline_id;
+            ?? $defaultPipeline?->ghl_pipeline_id;
 
         $activePipeline = null;
 
@@ -64,7 +69,7 @@ class PipelineController extends Controller
         ]);
 
         $user = $request->user();
-        $locationId = session('active_location_id')
+        $locationId = $request->attributes->get('active_location_id')
             ?? $user->ghl_location_id
             ?? $user->location_id
             ?? null;
@@ -103,7 +108,7 @@ class PipelineController extends Controller
         });
 
         // 2. Real-time Push to GoHighLevel (GHL API v2)
-        $this->syncOpportunityStageToGhl($opportunity, $targetStage->ghl_stage_id, $user);
+        $this->syncOpportunityStageToGhl($opportunity, $targetStage->ghl_stage_id);
 
         return response()->json([
             'message' => 'Opportunity moved and synced with GHL successfully.',
@@ -114,21 +119,10 @@ class PipelineController extends Controller
     /**
      * Private helper to push stage update to GoHighLevel API
      */
-    private function syncOpportunityStageToGhl(GhlOpportunity $opportunity, string $newStageId, $user): void
+    private function syncOpportunityStageToGhl(GhlOpportunity $opportunity, string $newStageId): void
     {
-        $tokenRecord = null;
-
-        // Database table exist karti hai toh access token fetch karein
-        if (\Schema::hasTable('ghl_tokens')) {
-            $tokenRecord = \DB::table('ghl_tokens')
-                ->where('location_id', $opportunity->ghl_location_id)
-                ->first();
-        }
-
-        // Access Token Fallback Sequence
-        $accessToken = session('ghl_access_token')
-            ?? $user->ghl_access_token
-            ?? $tokenRecord?->access_token
+        $accessToken = GhlLocation::where('ghl_location_id', $opportunity->ghl_location_id)
+            ->value('access_token')
             ?? config('services.marketplace.access_token');
 
         if (!$accessToken) {
@@ -142,7 +136,7 @@ class PipelineController extends Controller
                 'Version' => '2021-07-28',
                 'Content-Type' => 'application/json',
                 'Accept' => 'application/json',
-            ])->put("https://services.gohighlevel.com/v2/opportunities/{$opportunity->ghl_opportunity_id}", [
+            ])->put("https://services.leadconnectorhq.com/v2/opportunities/{$opportunity->ghl_opportunity_id}", [
                         'pipelineId' => $opportunity->ghl_pipeline_id,
                         'pipelineStageId' => $newStageId,
                         'name' => $opportunity->name,

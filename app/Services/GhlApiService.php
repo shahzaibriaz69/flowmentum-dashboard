@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\GhlLocation;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -14,7 +15,10 @@ class GhlApiService
      */
     protected function headers(): array
     {
-        $accessToken = auth()->user()->ghl_access_token ?? session('ghl_access_token');
+        $locationId = auth()->user()?->location_id ?? auth()->user()?->ghl_location_id;
+        $accessToken = GhlLocation::where('ghl_location_id', $locationId)
+            ->value('access_token')
+            ?? config('services.marketplace.access_token');
 
         return [
             'Authorization' => 'Bearer ' . $accessToken,
