@@ -162,10 +162,7 @@ class PipelineController extends Controller
             $url = "https://services.leadconnectorhq.com/opportunities/{$opportunity->ghl_opportunity_id}";
 
             $payload = [
-                'pipelineId'      => $opportunity->ghl_pipeline_id,
                 'pipelineStageId' => $newStageId,
-                'name'            => $opportunity->name,
-                'status'          => $opportunity->status ?? 'open',
             ];
 
             $response = $this->sendGhlOpportunityUpdate($url, $payload, $accessToken);
