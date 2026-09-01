@@ -13,10 +13,21 @@ class LocationSyncController extends Controller
     {
         $user = auth()->user();
 
-        $userLocationIds = $user->locationId;
-        if (!empty($userLocationId)) {
-            $locations = GhlLocation::whereIn('ghl_location_id', $userLocationIds)->get();
+        $userLocationIds = collect([
+            $user->location_id ?? null,
+            $user->ghl_location_id ?? null,
+        ])->filter()->map(fn ($id) => (string) $id);
+
+        $locations = GhlLocation::where('user_id', $user->id)
+            ->orWhereIn('ghl_location_id', $userLocationIds->all())
+            ->get()
+            ->unique('ghl_location_id')
+            ->values();
+
+        if ($locations->isEmpty()) {
+            return $this->errorResponse($request, 'No connected GHL location found for this user.', 404);
         }
+
         foreach ($locations as $location) {
             if (!$location || empty($location->access_token) || empty($location->refresh_token)) {
                 return $this->errorResponse($request, 'OAuth tokens missing or location not connected.', 401);

@@ -11,6 +11,10 @@ use App\Http\Controllers\LocationSyncController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\ConversationController;
+
+Route::post('/ghl-webhooks/conversations', [ConversationController::class, 'handleWebhook'])
+    ->name('ghl.webhooks.conversations');
 
 // ===== GHL Webhook Routes (Public, no middleware) =====
 // 1. Contacts Webhook Route
@@ -151,6 +155,10 @@ Route::get('/workspace/{page}', function (string $page) {
     abort_unless(in_array($page, ['people', 'inbox', 'pipeline', 'marketing', 'automations', 'sites'], true), 404);
     return redirect()->route($page);
 })->where('page', 'people|inbox|pipeline|marketing|automations|sites')->name('workspace');
+
+
+
+Route::post('/webhooks/conversations', [ConversationController::class, 'handleWebhook']);
 
 // Auth routes
 require __DIR__ . '/auth.php';

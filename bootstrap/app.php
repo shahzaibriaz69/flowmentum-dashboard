@@ -17,6 +17,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'check.location' => \App\Http\Middleware\CheckLocation::class,
         ]);
+
+        $middleware->validateCsrfTokens(except: ['ghl-webhooks/*']);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

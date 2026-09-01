@@ -3,6 +3,10 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\ConversationController;
+
+Route::post('/ghl-webhooks/conversations', [ConversationController::class, 'handleWebhook'])
+    ->name('api.ghl.webhooks.conversations');
 
 // ===== GHL Webhook Routes (accessible at /api/ghl-webhooks/...) =====
 // 1. Contacts Webhook Route

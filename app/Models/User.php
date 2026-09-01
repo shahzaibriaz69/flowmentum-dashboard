@@ -6,9 +6,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Enums\RoleEnum;
-use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -68,7 +66,7 @@ class User extends Authenticatable
 
     public function IsLocation(): bool
     {
-        return $this->hasRole(RoleEnum::AGENCY->value);
+        return $this->hasRole(RoleEnum::LOCATION->value);
     }
 
     public function IsGhlUser(): bool
