@@ -11,6 +11,7 @@ class ConversationMessage extends Model
     protected $casts = [
         'raw_payload' => 'array',
         'attachments' => 'array',
+        'mentions' => 'array',
         'sent_at' => 'datetime',
     ];
 

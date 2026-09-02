@@ -75,11 +75,23 @@ class SyncLocationDetailsService
         $body = $payload['body'] ?? $message['body'] ?? $payload['text'] ?? $message['text'] ?? null;
         $dateAdded = $payload['dateAdded'] ?? $message['dateAdded'] ?? null;
         $data = [
+            'event_type' => $payload['type'] ?? $message['type'] ?? null,
+            'location_id' => $payload['locationId'] ?? $message['locationId'] ?? $location?->ghl_location_id,
+            'contact_id' => $contactId,
+            'conversation_platform_id' => $conversationId,
             'direction' => strtolower((string) ($payload['direction'] ?? $message['direction'] ?? 'inbound')) === 'outbound' ? 'outbound' : 'inbound',
             'message_type' => strtolower((string) ($payload['messageType'] ?? $message['messageType'] ?? $message['type'] ?? 'text')),
             'status' => $payload['status'] ?? $message['status'] ?? null,
             'content_type' => $payload['contentType'] ?? $message['contentType'] ?? null,
             'source' => $payload['source'] ?? $message['source'] ?? null,
+            'conversation_provider_id' => $payload['conversationProviderId'] ?? $message['conversationProviderId'] ?? null,
+            'chat_widget_id' => $payload['chatWidgetId'] ?? $message['chatWidgetId'] ?? null,
+            'from_address' => self::stringValue($payload['from'] ?? $message['from'] ?? null),
+            'to_address' => self::stringValue($payload['to'] ?? $message['to'] ?? null),
+            'message_type_id' => $payload['messageTypeId'] ?? $message['messageTypeId'] ?? null,
+            'message_type_string' => $payload['messageTypeString'] ?? $message['messageTypeString'] ?? null,
+            'user_id' => $payload['userId'] ?? $message['userId'] ?? null,
+            'mentions' => $payload['mentions'] ?? $message['mentions'] ?? [],
             'attachments' => $payload['attachments'] ?? $message['attachments'] ?? [],
             'body' => is_scalar($body) ? (string) $body : ($body ? json_encode($body) : null),
             'raw_payload' => $payload,
@@ -92,6 +104,15 @@ class SyncLocationDetailsService
 
         $conversation->update(['last_message' => $data['body'], 'last_message_at' => $dateAdded ?: now()]);
         return $storedMessage;
+    }
+
+    private static function stringValue(mixed $value): ?string
+    {
+        if ($value === null || is_scalar($value)) {
+            return $value === null ? null : (string) $value;
+        }
+
+        return json_encode($value) ?: null;
     }
 
     private static function upsertConversation(array $payload, ?GhlLocation $location, string $conversationId): Conversation
