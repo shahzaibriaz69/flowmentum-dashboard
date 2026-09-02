@@ -44,6 +44,13 @@ class InboxController extends Controller
             ]);
 
         if (!$response->successful()) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'GoHighLevel message send failed.',
+                ], $response->status());
+            }
+
             return back()->withInput()->with('error', 'GoHighLevel message send failed.');
         }
 
@@ -58,6 +65,13 @@ class InboxController extends Controller
             'status' => 'sent',
             'messageId' => $response->json('messageId'),
         ], $this->location(), $conversation);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'status' => 'success',
+                'message_id' => $response->json('messageId'),
+            ]);
+        }
 
         return redirect()->route('inbox');
     }
