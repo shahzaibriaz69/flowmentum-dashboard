@@ -60,7 +60,6 @@ Route::middleware('auth')->group(function () {
         ->name('logout');
 
     Route::get('/people', fn() => view('workspace', ['page' => 'people']))->name('people');
-    Route::get('/inbox', fn() => view('workspace', ['page' => 'inbox']))->name('inbox');
     Route::get('/pipeline', [PipelineController::class, 'index'])->name('pipeline');
     Route::patch('/pipeline/opportunities/{opportunity}/stage', [PipelineController::class, 'moveOpportunity'])
         ->name('pipeline.opportunities.move');

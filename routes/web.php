@@ -133,6 +133,8 @@ Route::get('/dashboard', function () {
 Route::middleware(['auth', 'check.location'])->group(function () {
     Route::get('/people', [PeopleController::class, 'index'])->name('people');
     Route::get('/inbox', [InboxController::class, 'index'])->name('inbox');
+    Route::post('/inbox/sync', [InboxController::class, 'sync'])->name('inbox.sync');
+    Route::post('/inbox/{conversation}/send', [InboxController::class, 'send'])->name('inbox.send');
     // Temporary test route outside middleware
     Route::get('/test-pipeline', [App\Http\Controllers\PipelineController::class, 'index']);
     Route::get('/marketing', [MarketingController::class, 'index'])->name('marketing');

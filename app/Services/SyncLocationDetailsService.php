@@ -9,6 +9,8 @@ use App\Models\GhlCustomField;
 use App\Models\GhlLocation;
 use App\Models\GhlOpportunity;
 use App\Models\GhlTag;
+use App\Models\Conversation;
+use App\Models\ConversationMessage;
 use App\Models\GhlUser;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -16,6 +18,113 @@ use Illuminate\Support\Facades\Log;
 
 class SyncLocationDetailsService
 {
+
+    public static function syncConversations(GhlLocation $location): int
+    {
+        $response = self::conversationRequest($location, 'https://services.leadconnectorhq.com/conversations/search', [
+            'locationId' => $location->ghl_location_id,
+            'limit' => 100,
+        ]);
+        $syncedMessages = 0;
+
+        foreach (($response['conversations'] ?? $response['data'] ?? []) as $conversationData) {
+            if (is_string($conversationData)) {
+                $conversationData = ['id' => $conversationData];
+            }
+
+            if (!is_array($conversationData)) {
+                continue;
+            }
+
+            $conversationId = $conversationData['id'] ?? $conversationData['conversationId'] ?? null;
+            if (!$conversationId) {
+                continue;
+            }
+
+            $conversation = self::upsertConversation($conversationData, $location, (string) $conversationId);
+            $messages = self::conversationRequest($location, "https://services.leadconnectorhq.com/conversations/{$conversationId}/messages", [
+                'limit' => 100,
+            ]);
+
+            foreach (($messages['messages'] ?? $messages['data'] ?? []) as $messageData) {
+                if (!is_array($messageData)) {
+                    continue;
+                }
+
+                if (self::persistConversationMessage($messageData, $location, $conversation)) {
+                    $syncedMessages++;
+                }
+            }
+        }
+
+        return $syncedMessages;
+    }
+
+    public static function persistConversationMessage(array $payload, ?GhlLocation $location = null, ?Conversation $conversation = null): ?ConversationMessage
+    {
+        $message = is_array($payload['message'] ?? null) ? $payload['message'] : $payload;
+        $conversationId = $payload['conversationId'] ?? $message['conversationId'] ?? $conversation?->platform_conversation_id;
+        $contactId = $payload['contactId'] ?? $message['contactId'] ?? null;
+        $conversationId ??= $contactId ? "conv_{$contactId}" : null;
+        if (!$conversationId) {
+            return null;
+        }
+
+        $conversation ??= self::upsertConversation($payload, $location, (string) $conversationId);
+        $messageId = $payload['messageId'] ?? $message['id'] ?? $payload['id'] ?? null;
+        $body = $payload['body'] ?? $message['body'] ?? $payload['text'] ?? $message['text'] ?? null;
+        $dateAdded = $payload['dateAdded'] ?? $message['dateAdded'] ?? null;
+        $data = [
+            'direction' => strtolower((string) ($payload['direction'] ?? $message['direction'] ?? 'inbound')) === 'outbound' ? 'outbound' : 'inbound',
+            'message_type' => strtolower((string) ($payload['messageType'] ?? $message['messageType'] ?? $message['type'] ?? 'text')),
+            'status' => $payload['status'] ?? $message['status'] ?? null,
+            'content_type' => $payload['contentType'] ?? $message['contentType'] ?? null,
+            'source' => $payload['source'] ?? $message['source'] ?? null,
+            'attachments' => $payload['attachments'] ?? $message['attachments'] ?? [],
+            'body' => is_scalar($body) ? (string) $body : ($body ? json_encode($body) : null),
+            'raw_payload' => $payload,
+            'sent_at' => $dateAdded,
+        ];
+
+        $storedMessage = $messageId
+            ? $conversation->messages()->updateOrCreate(['platform_message_id' => (string) $messageId], $data)
+            : $conversation->messages()->create($data);
+
+        $conversation->update(['last_message' => $data['body'], 'last_message_at' => $dateAdded ?: now()]);
+        return $storedMessage;
+    }
+
+    private static function upsertConversation(array $payload, ?GhlLocation $location, string $conversationId): Conversation
+    {
+        $contact = is_array($payload['contact'] ?? null) ? $payload['contact'] : [];
+        $contactId = $payload['contactId'] ?? $contact['id'] ?? $contact['_id'] ?? 'unknown';
+        $contactName = $payload['contactName'] ?? $contact['name'] ?? trim(($contact['firstName'] ?? '') . ' ' . ($contact['lastName'] ?? ''));
+
+        return Conversation::updateOrCreate(
+            ['platform_conversation_id' => $conversationId],
+            [
+                'contact_id' => (string) $contactId,
+                'contact_name' => $contactName ?: null,
+                'contact_phone_or_email' => $contact['phone'] ?? $contact['email'] ?? $payload['from'] ?? null,
+                'location_id' => $location?->ghl_location_id ?? $payload['locationId'] ?? null,
+            ]
+        );
+    }
+
+    private static function conversationRequest(GhlLocation $location, string $url, array $query = []): array
+    {
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer ' . $location->access_token,
+            'Version' => '2021-04-15',
+            'Accept' => 'application/json',
+        ])->get($url, $query);
+
+        if (!$response->successful()) {
+            throw new \RuntimeException('GHL conversations sync failed: ' . $response->body());
+        }
+
+        return $response->json() ?? [];
+    }
 
     public static function syncLocationDetails(GhlLocation $location): void
     {

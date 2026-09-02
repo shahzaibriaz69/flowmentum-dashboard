@@ -82,6 +82,7 @@ class LocationSyncController extends Controller
                 $syncedContactsCount = SyncLocationDetailsService::syncContacts($location);
                 $syncedOpportunitiesCount = SyncLocationDetailsService::syncOpportunities($location);
                 $syncedAppointmentsCount = SyncLocationDetailsService::syncAppointments($location);
+                $syncedMessagesCount = SyncLocationDetailsService::syncConversations($location);
             } catch (\Exception $e) {
                 Log::error('GHL Users Sync Failed', ['error' => $e->getMessage()]);
 
@@ -98,11 +99,12 @@ class LocationSyncController extends Controller
 
             $result = [
                 'status' => 'success',
-                'message' => "Location synced successfully! {$syncedUsersCount} users, {$syncedContactsCount} contacts, {$syncedOpportunitiesCount} opportunities, and {$syncedAppointmentsCount} appointments saved.",
+                'message' => "Location synced successfully! {$syncedUsersCount} users, {$syncedContactsCount} contacts, {$syncedOpportunitiesCount} opportunities, {$syncedAppointmentsCount} appointments, and {$syncedMessagesCount} messages saved.",
                 'synced_users_count' => $syncedUsersCount,
                 'synced_contacts_count' => $syncedContactsCount,
                 'synced_opportunities_count' => $syncedOpportunitiesCount,
                 'synced_appointments_count' => $syncedAppointmentsCount,
+                'synced_messages_count' => $syncedMessagesCount,
                 'expires_at' => $location->fresh()->expires_at?->toDateTimeString()
             ];
 

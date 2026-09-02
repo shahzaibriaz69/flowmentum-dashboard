@@ -135,7 +135,8 @@ class MarketplaceController extends Controller
             'Tags: ' . ($results['tags'] ? 'OK' : 'Failed') . ', ' .
             'Pipelines: ' . ($results['pipelines'] ? 'OK' : 'Failed') . ', ' .
             'Contacts: ' . ($results['contacts'] ? 'OK' : 'Failed') . ', ' .
-            'Opportunities: ' . ($results['opportunities'] ? 'OK' : 'Failed')
+            'Opportunities: ' . ($results['opportunities'] ? 'OK' : 'Failed') . ', ' .
+            'Conversations: ' . ($results['conversations'] ? 'OK' : 'Failed')
         );
     }
 
@@ -153,6 +154,7 @@ class MarketplaceController extends Controller
             'contacts'      => $this->syncContacts($location),
             'opportunities' => $this->syncOpportunities($location),
             'appointments'  => $this->syncAppointments($location),
+            'conversations' => $this->syncConversations($location),
         ];
     }
 
@@ -602,6 +604,16 @@ class MarketplaceController extends Controller
             return SyncLocationDetailsService::syncAppointments($location) > 0;
         } catch (\Throwable $e) {
             Log::error('GHL Appointments Sync Exception: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    private function syncConversations(GhlLocation $location): bool
+    {
+        try {
+            return SyncLocationDetailsService::syncConversations($location) > 0;
+        } catch (\Throwable $e) {
+            Log::error('GHL Conversations Sync Exception: ' . $e->getMessage());
             return false;
         }
     }

@@ -32,7 +32,7 @@
             </a>
             <nav class="hidden xl:flex items-center gap-1 whitespace-nowrap">
                 @foreach(['dashboard' => ['Dashboard', 'fa-border-all'], 'people' => ['People', 'fa-users'], 'inbox' => ['Inbox', 'fa-comment-dots'], 'pipeline' => ['Pipeline', 'fa-bullseye'], 'marketing' => ['Marketing', 'fa-bullhorn'], 'automations' => ['Automations', 'fa-bolt'], 'sites' => ['Sites', 'fa-globe']] as $key => [$label, $icon])
-                    @php($active = $key === 'pipeline')
+                    @php($active = request()->routeIs($key))
                     <a href="{{ $key === 'dashboard' ? route('dashboard') : route('workspace', $key) }}" class="px-3 py-2 rounded-xl flex items-center gap-2 text-sm font-medium transition-colors {{ $active ? 'bg-blue-50 dark:bg-[#16233b] text-blue-600 dark:text-[#5b9bf6]' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.03]' }}">
                         <i class="fa-solid {{ $icon }}"></i>{{ $label }}
                     </a>

@@ -7,6 +7,10 @@ class Conversation extends Model
 {
     protected $guarded = [];
 
+    protected $casts = [
+        'last_message_at' => 'datetime',
+    ];
+
     public function messages()
     {
         return $this->hasMany(ConversationMessage::class);
