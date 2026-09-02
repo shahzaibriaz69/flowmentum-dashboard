@@ -21,6 +21,18 @@ class InboxController extends Controller
         $selectedConversationId = (int) $request->integer('conversation');
         $activeConversation = $conversations->firstWhere('id', $selectedConversationId) ?: $conversations->first();
 
+        if ($request->expectsJson()) {
+            return response()->json([
+                'conversation_id' => $activeConversation?->id,
+                'messages' => $activeConversation?->messages->sortBy('sent_at')->values()->map(fn ($message) => [
+                    'body' => $message->body,
+                    'direction' => $message->direction,
+                    'message_type' => strtoupper($message->message_type),
+                    'sent_at' => $message->sent_at?->format('M j, g:i A') ?: $message->created_at?->format('M j, g:i A'),
+                ]),
+            ]);
+        }
+
         return view('inbox', compact('conversations', 'location', 'activeConversation'));
     }
 
@@ -54,6 +66,10 @@ class InboxController extends Controller
             return back()->withInput()->with('error', 'GoHighLevel message send failed.');
         }
 
+        $messageId = $response->json('messageId')
+            ?? $response->json('message.id')
+            ?? $response->json('id');
+
         SyncLocationDetailsService::persistConversationMessage([
             'type' => 'OutboundMessage',
             'locationId' => $conversation->location_id,
@@ -63,13 +79,13 @@ class InboxController extends Controller
             'direction' => 'outbound',
             'messageType' => 'SMS',
             'status' => 'sent',
-            'messageId' => $response->json('messageId'),
+            'messageId' => $messageId,
         ], $this->location(), $conversation);
 
         if ($request->expectsJson()) {
             return response()->json([
                 'status' => 'success',
-                'message_id' => $response->json('messageId'),
+                'message_id' => $messageId,
             ]);
         }
 

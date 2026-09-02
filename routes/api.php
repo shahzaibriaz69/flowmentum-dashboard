@@ -8,6 +8,12 @@ use App\Http\Controllers\ConversationController;
 Route::post('/ghl-webhooks/conversations', [ConversationController::class, 'handleWebhook'])
     ->name('api.ghl.webhooks.conversations');
 
+Route::post('/ghl-webhooks/inbound-message', [ConversationController::class, 'handleWebhook'])
+    ->name('api.ghl.webhooks.inbound-message');
+
+Route::post('/ghl-webhooks/outbound-message', [ConversationController::class, 'handleWebhook'])
+    ->name('api.ghl.webhooks.outbound-message');
+
 // ===== GHL Webhook Routes (accessible at /api/ghl-webhooks/...) =====
 // 1. Contacts Webhook Route
 Route::post("/ghl-webhooks/contacts", function (Request $request) {

@@ -21,6 +21,14 @@ Laravel is a web application framework with expressive, elegant syntax. We belie
 
 Laravel is accessible, powerful, and provides tools required for large, robust applications.
 
+## GHL Messaging Webhooks
+
+Configure both the `InboundMessage` and `OutboundMessage` events in GoHighLevel to use this public HTTPS URL:
+
+`https://YOUR-DOMAIN.com/api/ghl-webhooks/conversations`
+
+The dedicated alternatives `/api/ghl-webhooks/inbound-message` and `/api/ghl-webhooks/outbound-message` use the same handler. The application stores the complete payload in `conversation_messages.raw_payload` and maps the documented fields to searchable columns. A local URL such as `127.0.0.1` cannot receive callbacks from GoHighLevel; use a deployed HTTPS URL or an HTTPS tunnel during development.
+
 ## Learning Laravel
 
 Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.

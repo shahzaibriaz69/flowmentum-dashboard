@@ -11,6 +11,12 @@ class ConversationController extends Controller
     public function handleWebhook(Request $request)
     {
         $payload = $request->all();
+        $eventType = strtolower((string) ($payload['type'] ?? $payload['event'] ?? ''));
+
+        if ($eventType && !in_array($eventType, ['inboundmessage', 'outboundmessage'], true)) {
+            return response()->json(['status' => 'ignored'], 200);
+        }
+
         Log::info('GHL Conversation Webhook Incoming', [
             'event' => $payload['type'] ?? $payload['event'] ?? null,
             'keys' => array_keys($payload),

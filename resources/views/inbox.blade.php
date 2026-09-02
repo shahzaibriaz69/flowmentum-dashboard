@@ -89,11 +89,48 @@
     const sendError = document.getElementById('sendMessageError');
 
     if (sendForm && messageThread) {
+        const renderMessages = (messages) => {
+            messageThread.innerHTML = '';
+            messages.forEach((message) => {
+                const row = document.createElement('div');
+                row.className = `flex ${message.direction === 'outbound' ? 'justify-end' : 'justify-start'}`;
+                const bubble = document.createElement('div');
+                bubble.className = `max-w-[78%] rounded-2xl px-4 py-3 text-sm ${message.direction === 'outbound' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-800 dark:bg-[#1c2839] dark:text-slate-200'}`;
+                const text = document.createElement('p');
+                text.className = 'whitespace-pre-wrap';
+                text.textContent = message.body || '';
+                const meta = document.createElement('div');
+                meta.className = 'mt-2 flex items-center justify-end gap-2 text-[10px] opacity-60';
+                meta.innerHTML = `<span>${message.message_type}</span><span>${message.sent_at || ''}</span>`;
+                bubble.append(text, meta);
+                row.appendChild(bubble);
+                messageThread.appendChild(row);
+            });
+        };
+
         const scrollThreadToBottom = () => {
             messageThread.scrollTo({ top: messageThread.scrollHeight, behavior: 'smooth' });
         };
 
         window.addEventListener('load', scrollThreadToBottom);
+
+        const refreshMessages = async () => {
+            try {
+                const response = await fetch(`${window.location.pathname}${window.location.search}`, {
+                    headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                });
+                if (!response.ok) return;
+                const data = await response.json();
+                const currentCount = messageThread.children.length;
+                if (data.messages && data.messages.length !== currentCount) {
+                    renderMessages(data.messages);
+                    scrollThreadToBottom();
+                }
+            } catch (error) {
+            }
+        };
+
+        window.setInterval(refreshMessages, 5000);
 
         sendForm.addEventListener('submit', async (event) => {
             event.preventDefault();
